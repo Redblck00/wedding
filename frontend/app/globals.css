@@ -1,0 +1,56 @@
+@import "tailwindcss";
+
+/**
+ * The palette commits to one light, ivory look rather than following
+ * `prefers-color-scheme`. A wedding invitation is a printed-paper object in
+ * people's minds; a dark rendering of it reads as a different product, and the
+ * couple's photographs are colour-graded for a warm ground, not a black one.
+ */
+@theme {
+  --color-ivory: #fdfaf5;
+  --color-shell: #f5efe6;
+  --color-ink: #2b2520;
+  --color-muted: #7d736a;
+  --color-line: #e6dccd;
+  --color-rose: #9e5a63;
+  --color-rose-soft: #d9b3b8;
+  --color-gold: #c6a15b;
+  --color-sage: #8fa089;
+}
+
+@theme inline {
+  --font-display: var(--font-cormorant);
+  --font-body: var(--font-inter);
+}
+
+body {
+  background-color: var(--color-ivory);
+  color: var(--color-ink);
+  font-family: var(--font-body), system-ui, sans-serif;
+  /* Guests arrive on phones, often from a chat app's in-app browser, where an
+     accidental horizontal scroll is the most common way a layout looks broken. */
+  overflow-x: hidden;
+}
+
+/**
+ * Utility for the full-height hero.
+ *
+ * `100vh` on mobile is measured *without* the browser's collapsing address bar,
+ * so a `100vh` hero has its bottom edge hidden under it on first paint — which
+ * is exactly where the scroll cue and the date usually sit. `100svh` is the
+ * smallest viewport height, so the whole hero is visible from the start.
+ */
+.h-screen-safe {
+  height: 100vh;
+  height: 100svh;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
