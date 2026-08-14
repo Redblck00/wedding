@@ -1,17 +1,20 @@
+import math
 import uuid
 from typing import Annotated
 
 import jwt
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.config import settings
 from app.core.security import decode_access_token
 from app.database import get_db
 from app.models.enums import UserRole
 from app.models.user import User
 from app.models.wedding import Wedding
+from app.utils import rate_limit
 
 SessionDep = Annotated[Session, Depends(get_db)]
 
@@ -84,3 +87,55 @@ def get_owned_wedding(wedding_id: uuid.UUID, db: SessionDep, current_user: Curre
 
 
 OwnedWedding = Annotated[Wedding, Depends(get_owned_wedding)]
+
+
+def client_ip(request: Request) -> str:
+    """The address a rate limit is keyed on.
+
+    `X-Forwarded-For` is only consulted as far as `trusted_proxy_count` says
+    there are proxies to trust. The header is appended to by each hop, so with
+    `n` trusted proxies in front the client's own address is the n-th entry from
+    the right; everything left of that was supplied by the caller and is free to
+    invent. A short or absent header means the request did not come through the
+    expected chain, so the peer address is used instead.
+    """
+    trusted = settings.trusted_proxy_count
+    if trusted > 0:
+        forwarded = request.headers.get("x-forwarded-for", "")
+        hops = [hop.strip() for hop in forwarded.split(",") if hop.strip()]
+        if len(hops) >= trusted:
+            return hops[-trusted]
+
+    # None when the connection has no peer, which happens under some ASGI test
+    # transports — one shared bucket is the safe reading of "address unknown".
+    return request.client.host if request.client else "unknown"
+
+
+def _too_many_requests(retry_after: float) -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+        detail="Too many requests — please try again shortly",
+        headers={"Retry-After": str(math.ceil(retry_after))},
+    )
+
+
+def enforce_rate_limit(
+    request: Request, *, bucket: str, limit: int, window_seconds: int
+) -> None:
+    """Raises 429 when `bucket` has had `limit` hits from this address already.
+
+    Spends a hit on every call. For endpoints where only failures should count,
+    pair `guard_rate_limit` with `rate_limit.record` instead.
+    """
+    retry_after = rate_limit.check(
+        f"{bucket}:{client_ip(request)}", limit=limit, window_seconds=window_seconds
+    )
+    if retry_after is not None:
+        raise _too_many_requests(retry_after)
+
+
+def guard_rate_limit(key: str, *, limit: int) -> None:
+    """Raises 429 when `key` is already over `limit`, without spending a hit."""
+    retry_after = rate_limit.over_limit(key, limit=limit)
+    if retry_after is not None:
+        raise _too_many_requests(retry_after)

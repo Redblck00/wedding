@@ -1,6 +1,7 @@
 """Rules that outlive any single endpoint: slug allocation, seeding, publishing."""
 
 import uuid
+from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -77,6 +78,17 @@ def seed_sections(db: Session, wedding: Wedding) -> list[WeddingSection]:
     return sections
 
 
+def _is_filled(content: dict[str, Any]) -> bool:
+    """True once a section holds something a guest could actually read.
+
+    A truthiness test on the dict alone is not enough: a template that ships
+    `default_content` — a placeholder schedule, an empty `{"name": ""}` — seeds a
+    non-empty dict before the couple has typed anything, and the publish gate
+    below would wave it through. So look at the values, not the keys.
+    """
+    return any(value not in (None, "", [], {}, ()) for value in content.values())
+
+
 def missing_required_sections(db: Session, wedding: Wedding) -> list[str]:
     """Names of sections that must be filled before publishing but are not.
 
@@ -96,8 +108,8 @@ def missing_required_sections(db: Session, wedding: Wedding) -> list[str]:
     ):
         required[definition.section_type] = definition.display_name
 
-    # `content == {}` counts as unfilled: seeding creates the row before the
-    # couple has typed anything into it.
-    filled = {section.section_type for section in wedding.sections if section.content}
+    # An untouched section counts as unfilled: seeding creates the row before
+    # the couple has typed anything into it.
+    filled = {section.section_type for section in wedding.sections if _is_filled(section.content)}
 
     return [name for section_type, name in required.items() if section_type not in filled]

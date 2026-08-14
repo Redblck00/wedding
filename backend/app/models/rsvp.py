@@ -15,7 +15,11 @@ if TYPE_CHECKING:
 
 class RsvpResponse(UUIDPrimaryKeyMixin, Base):
     """A guest's reply. Written by the *public* endpoint — no auth, so the
-    router must rate-limit it before the invitation link is shared anywhere.
+    router throttles it per address and drops identical resubmits.
+
+    There is no unique constraint tying a row to a guest, and there cannot be a
+    useful one: replies are anonymous, so nothing here identifies a person.
+    Duplicates are expected to be rare and are the couple's to delete.
     """
 
     __tablename__ = "rsvp_responses"

@@ -44,8 +44,12 @@ class Template(UUIDPrimaryKeyMixin, CreatedAtMixin, Base):
     )
 
     category: Mapped[Optional["TemplateCategory"]] = relationship(back_populates="templates")
+    # Ordered here so every reader — the marketplace detail view and the editor
+    # alike — sees the sections in the order the design intends.
     contents: Mapped[list["TemplateContent"]] = relationship(
-        back_populates="template", cascade="all, delete-orphan"
+        back_populates="template",
+        cascade="all, delete-orphan",
+        order_by="TemplateContent.display_order",
     )
     user_templates: Mapped[list["UserTemplate"]] = relationship(
         back_populates="template", cascade="all, delete-orphan"

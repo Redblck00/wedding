@@ -18,3 +18,11 @@ class NotificationRead(ORMModel):
 
 class NotificationMarkReadRequest(BaseModel):
     ids: list[uuid.UUID]
+
+
+class NotificationUnreadCount(BaseModel):
+    """Bell-badge payload. An object rather than a bare int so a later addition
+    (e.g. a per-type breakdown) does not change the response's JSON type.
+    """
+
+    count: int
