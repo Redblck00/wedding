@@ -62,6 +62,35 @@ export function validateRegister({ full_name, email, phone, password }) {
   return errors;
 }
 
+/**
+ * Kept in step with `SLUG_PATTERN` in `app/schemas/wedding.py`. The cap is 60
+ * rather than the column's 150 because this string is printed on the card and
+ * encoded in the QR, and both get worse as it grows.
+ */
+export const SLUG_LIMITS = { min: 3, max: 60 };
+const SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+
+export function validateWeddingCreate({ slug, bride_name, groom_name }) {
+  const errors = {};
+
+  if (!slug) {
+    errors.slug = "Хаягаа оруулна уу.";
+  } else if (slug.length < SLUG_LIMITS.min || slug.length > SLUG_LIMITS.max) {
+    errors.slug = `Хаяг ${SLUG_LIMITS.min}-${SLUG_LIMITS.max} тэмдэгт байх ёстой.`;
+  } else if (!SLUG_PATTERN.test(slug)) {
+    // Spelled out rather than shown as a regex: the couple picks this, sees it
+    // before it is printed, and has to understand why their Cyrillic was
+    // refused.
+    errors.slug =
+      "Зөвхөн латин жижиг үсэг, тоо, дундуур зураас. Эхэнд, төгсгөлд зураас байж болохгүй.";
+  }
+
+  if (!bride_name) errors.bride_name = "Сүйт бүсгүйн нэрийг оруулна уу.";
+  if (!groom_name) errors.groom_name = "Хүргэний нэрийг оруулна уу.";
+
+  return errors;
+}
+
 export function hasErrors(errors) {
   return Object.keys(errors).length > 0;
 }

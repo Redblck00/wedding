@@ -21,6 +21,10 @@
 @theme inline {
   --font-display: var(--font-cormorant);
   --font-body: var(--font-inter);
+  /* Rose-envelope invitation faces (set by the template's font class). */
+  --font-invitation: var(--font-jost);
+  --font-invite-display: var(--font-invite-playfair);
+  --font-invite-serif: var(--font-invite-cormorant);
 }
 
 body {
@@ -28,8 +32,10 @@ body {
   color: var(--color-ink);
   font-family: var(--font-body), system-ui, sans-serif;
   /* Guests arrive on phones, often from a chat app's in-app browser, where an
-     accidental horizontal scroll is the most common way a layout looks broken. */
-  overflow-x: hidden;
+     accidental horizontal scroll is the most common way a layout looks broken.
+     `clip` (not `hidden`) — overflow:hidden on body creates a scroll container
+     and breaks `position: sticky` on the invitation's scroll-driven scenes. */
+  overflow-x: clip;
 }
 
 /**
@@ -43,6 +49,74 @@ body {
 .h-screen-safe {
   height: 100vh;
   height: 100svh;
+}
+
+.min-h-screen-safe {
+  min-height: 100vh;
+  min-height: 100svh;
+}
+
+/**
+ * Hides the scrollbar on a horizontal snap-scroller while leaving it scrollable.
+ *
+ * Not a Tailwind utility — the class name comes from the `tailwind-scrollbar-hide`
+ * plugin, which this project does not install. Written out here so the venue
+ * carousel does not silently render with a visible bar on desktop.
+ */
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
+/**
+ * Confetti, fired once when a guest's RSVP is accepted.
+ *
+ * Three animations rather than one, on three nested elements, because a popper
+ * throws an arc and a single transform cannot describe one: the horizontal
+ * travel is even from start to finish while the vertical is a launch that slows
+ * and then a fall that accelerates. Splitting them lets each axis carry its own
+ * timing function, which is what gravity looks like.
+ *
+ * Every piece's trajectory arrives as custom properties set inline, so sixty
+ * pieces share these three rules instead of needing sixty keyframe blocks.
+ *
+ * `forwards` on all three: a piece must stay where it landed — below the fold,
+ * at zero opacity — rather than snapping back to the muzzle when it finishes.
+ */
+@keyframes confetti-drift {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(var(--confetti-dx));
+  }
+}
+
+@keyframes confetti-arc {
+  0% {
+    transform: translateY(0);
+    animation-timing-function: cubic-bezier(0.16, 0.62, 0.36, 1);
+  }
+  38% {
+    transform: translateY(var(--confetti-rise));
+    animation-timing-function: cubic-bezier(0.5, 0, 0.85, 0.6);
+  }
+  100% {
+    transform: translateY(var(--confetti-fall));
+  }
+}
+
+@keyframes confetti-spin {
+  from {
+    transform: rotate3d(var(--confetti-axis), 0deg);
+  }
+  to {
+    transform: rotate3d(var(--confetti-axis), var(--confetti-spin));
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

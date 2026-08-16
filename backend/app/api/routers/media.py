@@ -17,10 +17,14 @@ router = APIRouter(prefix="/weddings", tags=["media"])
 
 
 def _detach_from_galleries(db: Session, wedding_id: uuid.UUID, media_id: uuid.UUID) -> None:
-    """Drops a deleted asset's id out of any gallery's `media_ids`.
+    """Drops a deleted asset out of the gallery it was displayed in.
 
-    `content.media_ids` is the source of truth for what a gallery displays, so
-    leaving a dangling id there renders a broken image even though the row is gone.
+    Three references have to go, not one. `content.media_ids` is the source of
+    truth for what a gallery shows, so a dangling id there renders a broken
+    image even though the row is gone. `content.final_media_id` and
+    `content.hero_media_id` name the photos a design's closing panel and opening
+    screen use, and a dangling id in either leaves the section failing its own
+    validator on the couple's next save.
     """
     gallery = db.scalar(
         select(WeddingSection).where(
@@ -31,14 +35,25 @@ def _detach_from_galleries(db: Session, wedding_id: uuid.UUID, media_id: uuid.UU
     if gallery is None:
         return
 
-    media_ids = gallery.content.get("media_ids") or []
-    remaining = [value for value in media_ids if value != str(media_id)]
-    if len(remaining) == len(media_ids):
+    content = gallery.content
+    updated = dict(content)
+
+    media_ids = content.get("media_ids") or []
+    updated["media_ids"] = [value for value in media_ids if value != str(media_id)]
+
+    # Checked independently of the list above. The two can disagree — a photo
+    # removed from the gallery but still named as the final or opening one — and
+    # returning early on an unchanged `media_ids` would strand it.
+    for key in ("final_media_id", "hero_media_id"):
+        if content.get(key) == str(media_id):
+            updated[key] = None
+
+    if updated == content:
         return
 
     # Reassign rather than mutate: SQLAlchemy does not detect in-place changes to
     # a JSONB dict, so an edit made in place would never be written back.
-    gallery.content = {**gallery.content, "media_ids": remaining}
+    gallery.content = updated
 
 
 @router.post(

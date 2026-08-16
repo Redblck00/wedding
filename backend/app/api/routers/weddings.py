@@ -7,6 +7,7 @@ from sqlalchemy.orm import selectinload
 
 from app.api.deps import CurrentUser, OwnedWedding, SessionDep
 from app.models.enums import WeddingStatus
+from app.models.template import Template
 from app.models.wedding import Wedding
 from app.schemas.common import ErrorResponse
 from app.schemas.wedding import WeddingCreate, WeddingDetailRead, WeddingRead, WeddingUpdate
@@ -87,7 +88,11 @@ def read_wedding(wedding: OwnedWedding, db: SessionDep) -> Wedding:
             selectinload(Wedding.sections),
             selectinload(Wedding.venues),
             selectinload(Wedding.media_assets),
-            selectinload(Wedding.template),
+            # `contents` is chained on because the editor reads it on every
+            # load — the section labels and their required flags live there.
+            # The relationship carries its own display_order, so the forms
+            # arrive in the order the design intends.
+            selectinload(Wedding.template).selectinload(Template.contents),
         )
     )
 
@@ -131,11 +136,13 @@ def delete_wedding(wedding: OwnedWedding, db: SessionDep) -> None:
     responses={404: {"model": ErrorResponse}, 422: {"model": ErrorResponse}},
 )
 def publish_wedding(wedding: OwnedWedding, db: SessionDep) -> Wedding:
-    missing = wedding_service.missing_required_sections(db, wedding)
-    if missing:
+    blockers = wedding_service.publish_blockers(db, wedding)
+    if blockers:
+        # Joined into one `detail` string because that is the single field the
+        # frontend surfaces; each blocker is already a complete sentence.
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=f"Fill these sections before publishing: {', '.join(missing)}",
+            detail=" ".join(blockers),
         )
 
     wedding.status = WeddingStatus.PUBLISHED

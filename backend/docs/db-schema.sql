@@ -67,6 +67,13 @@ CREATE TABLE template_categories (
 CREATE TABLE templates (
     id             UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     category_id    UUID REFERENCES template_categories(id) ON DELETE SET NULL,
+    -- Stable key joining this row to the React component that draws the design,
+    -- e.g. 'rose-envelope'. The id cannot do this job: UUIDs are generated per
+    -- database, so a component registry keyed on one would break the moment
+    -- production stopped being the local machine.
+    -- Deliberately not named `slug` — weddings.slug is a public URL a couple
+    -- picks, whereas this is an identifier a developer commits alongside code.
+    code           VARCHAR(60) NOT NULL UNIQUE,
     name           VARCHAR(150) NOT NULL,
     thumbnail_url  TEXT NOT NULL,
     preview_url    TEXT,
@@ -180,6 +187,15 @@ CREATE TABLE venues (
     map_url         TEXT,                      -- Google Maps share link
     latitude        DOUBLE PRECISION,
     longitude       DOUBLE PRECISION,
+    -- When this location's part of the day starts, e.g. 17:00 for the ceremony.
+    -- TIME rather than TIMESTAMPTZ: the calendar day lives on
+    -- weddings.wedding_date, and a venue card only ever shows a clock time.
+    starts_at       TIME,
+    -- The photo shown on the venue card. An FK into media_assets, not a URL
+    -- column: an uploaded file is only deletable while its cloudinary_public_id
+    -- is kept, so a bare URL here would strand every replaced photo in storage
+    -- and keep billing for it. Same reason gallery sections store media ids.
+    photo_media_id  UUID,  -- FK added after media_assets table exists
     display_order   INTEGER NOT NULL DEFAULT 0,
     created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -203,6 +219,13 @@ CREATE TABLE media_assets (
 );
 CREATE INDEX idx_media_wedding ON media_assets(wedding_id);
 CREATE INDEX idx_media_section ON media_assets(section_id);
+
+-- Declared here rather than inline above because venues is created first.
+-- SET NULL, not CASCADE: deleting a photo must drop the venue's picture, never
+-- the venue itself.
+ALTER TABLE venues
+    ADD CONSTRAINT fk_venues_photo_media
+    FOREIGN KEY (photo_media_id) REFERENCES media_assets(id) ON DELETE SET NULL;
 
 CREATE TABLE rsvp_responses (
     id                 UUID PRIMARY KEY DEFAULT uuid_generate_v4(),

@@ -10,7 +10,7 @@ from pydantic import ValidationError
 
 from app.models.enums import SectionType
 from app.schemas.section import SECTION_CONTENT_SCHEMAS
-from app.utils.youtube import extract_video_id
+from app.utils.youtube import extract_start_seconds, extract_video_id
 
 
 class SectionContentError(ValueError):
@@ -58,4 +58,13 @@ def _normalise_music(content: dict[str, Any]) -> dict[str, Any]:
         raise SectionContentError(f"Could not read a YouTube video id from {raw!r}")
 
     content["youtube_video_id"] = video_id
+
+    # A timestamp on the link overrides the field beside it. Pasting the output
+    # of "Copy video URL at current time" is a deliberate act and the more
+    # specific of the two — while a link without one says nothing about where
+    # the track should start, so the field's own value stands.
+    start = extract_start_seconds(raw)
+    if start is not None:
+        content["start_seconds"] = start
+
     return content

@@ -28,8 +28,14 @@ const COOKIE_OPTIONS = {
 
 const REFRESH_MAX_AGE = 60 * 60 * 24 * 30;
 
-/** Signed-in-only areas. Everything not listed is public. */
-const PROTECTED_PREFIXES = ["/dashboard"];
+/**
+ * Signed-in-only areas. Everything not listed is public.
+ *
+ * `/weddings` (plural) is the owner's editor. The guest-facing invitation is
+ * `/wedding/{slug}` (singular) and must stay public — the same split the
+ * backend makes between its `/weddings` and `/wedding` routers.
+ */
+const PROTECTED_PREFIXES = ["/dashboard", "/weddings"];
 const ADMIN_PREFIXES = ["/admin"];
 
 /** Pages a signed-in user has no reason to see. */

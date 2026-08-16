@@ -1,7 +1,8 @@
 import uuid
+from datetime import time
 from typing import TYPE_CHECKING, Optional
 
-from sqlalchemy import Float, ForeignKey, Integer, String, Text, text
+from sqlalchemy import Float, ForeignKey, Integer, String, Text, Time, text
 from sqlalchemy.dialects.postgresql import UUID as PgUUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -32,6 +33,15 @@ class Venue(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     map_url: Mapped[str | None] = mapped_column(Text)  # Google Maps share link
     latitude: Mapped[Optional[float]] = mapped_column(Float)
     longitude: Mapped[Optional[float]] = mapped_column(Float)
+    # Clock time only — the calendar day is `weddings.wedding_date`.
+    starts_at: Mapped[Optional[time]] = mapped_column(Time)
+    # The card photo, as a tracked asset rather than a URL string: only a
+    # media_assets row carries the cloudinary_public_id that makes the file
+    # deletable later. SET NULL so removing a photo never removes the venue.
+    photo_media_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        PgUUID(as_uuid=True),
+        ForeignKey("media_assets.id", ondelete="SET NULL"),
+    )
     display_order: Mapped[int] = mapped_column(
         Integer, nullable=False, default=0, server_default=text("0")
     )

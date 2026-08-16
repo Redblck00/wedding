@@ -21,6 +21,14 @@ REQUIRED_SECTIONS_FOR_PUBLISH = (
     SectionType.EVENT_SCHEDULE,
 )
 
+# The designs are built around photographs — they carry the reveal sections and
+# the closing panel — so an invitation with one or two reads as unfinished
+# rather than sparse.
+#
+# This cannot be expressed as `is_required` on the gallery: that flag only asks
+# whether the section holds *something*, and a single photo satisfies it.
+MIN_GALLERY_PHOTOS = 3
+
 
 class WeddingServiceError(ValueError):
     """Domain failure. Routers map this to a 4xx — kept FastAPI-free so the
@@ -113,3 +121,65 @@ def missing_required_sections(db: Session, wedding: Wedding) -> list[str]:
     filled = {section.section_type for section in wedding.sections if _is_filled(section.content)}
 
     return [name for section_type, name in required.items() if section_type not in filled]
+
+
+def _gallery_photo_count(wedding: Wedding) -> int:
+    """How many photographs the guest page would actually show.
+
+    Counts `content.media_ids`, not rows in `media_assets`: the latter holds
+    every file the couple ever uploaded, including ones they since took out of
+    the gallery, and the public page renders the id list.
+    """
+    for section in wedding.sections:
+        if section.section_type is SectionType.GALLERY:
+            return len(section.content.get("media_ids") or [])
+    return 0
+
+
+def _sections_the_design_shows(db: Session, template_id: uuid.UUID) -> set[SectionType]:
+    """Which sections the chosen template actually renders.
+
+    Every rule below is scoped through this. A template that ships without a
+    gallery must not demand photographs it would never display, and one without
+    a venue section must not demand an address it has nowhere to print.
+    """
+    return set(
+        db.scalars(
+            select(TemplateContent.section_type).where(
+                TemplateContent.template_id == template_id,
+                TemplateContent.is_enabled.is_(True),
+            )
+        )
+    )
+
+
+def publish_blockers(db: Session, wedding: Wedding) -> list[str]:
+    """Everything standing between this invitation and its guests.
+
+    An empty list means publishable. Returns sentences rather than raising so
+    the caller picks the HTTP status, and so the couple is told what to fix
+    rather than that something is wrong.
+    """
+    blockers = [
+        f"'{name}' хэсгийг бөглөнө үү." for name in missing_required_sections(db, wedding)
+    ]
+
+    shown = _sections_the_design_shows(db, wedding.template_id)
+
+    if SectionType.GALLERY in shown:
+        count = _gallery_photo_count(wedding)
+        if count < MIN_GALLERY_PHOTOS:
+            blockers.append(
+                f"Зургийн цомогт дор хаяж {MIN_GALLERY_PHOTOS} зураг нэмнэ үү "
+                f"(одоо {count})."
+            )
+
+    # The venue section holds only the heading and a note — the addresses are
+    # rows in `venues`, which nothing else checks. Without this a couple can
+    # publish an invitation that never tells a guest where to go: the design
+    # renders no venue list and no map, and neither failure is visible from the
+    # editor.
+    if SectionType.VENUE in shown and not wedding.venues:
+        blockers.append("Хуримын байршлыг нэмнэ үү.")
+
+    return blockers

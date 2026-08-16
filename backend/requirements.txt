@@ -19,4 +19,12 @@ bcrypt==5.0.0
 python-multipart==0.0.32
 cloudinary==1.45.0
 Pillow==12.3.0
+
+# Pillow ships no HEIC/HEIF decoder, and HEIC is what an iPhone shoots by
+# default — without this, `media_service.ALLOWED_IMAGE_TYPES` accepts a content
+# type the decoder then rejects as "not a readable image". Safari converts to
+# JPEG on its way through a file picker, which is what has been hiding this;
+# anything sharing a photo by another route does not.
+pillow-heif==1.5.0
+
 qrcode[pil]==8.2

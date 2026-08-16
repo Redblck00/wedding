@@ -30,6 +30,11 @@ class Template(UUIDPrimaryKeyMixin, CreatedAtMixin, Base):
         ForeignKey("template_categories.id", ondelete="SET NULL"),
         index=True,
     )
+    # Joins this row to the React component that draws the design. `unique=True`
+    # builds the index the registry lookup needs. The id cannot serve here — it
+    # is generated per database, so a component keyed on one would resolve
+    # locally and 404 in production.
+    code: Mapped[str] = mapped_column(String(60), nullable=False, unique=True)
     name: Mapped[str] = mapped_column(String(150), nullable=False)
     thumbnail_url: Mapped[str] = mapped_column(Text, nullable=False)
     preview_url: Mapped[str | None] = mapped_column(Text)

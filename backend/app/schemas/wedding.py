@@ -7,7 +7,7 @@ from app.models.enums import WeddingStatus
 from app.schemas.common import ORMModel
 from app.schemas.media import MediaAssetRead
 from app.schemas.section import WeddingSectionRead
-from app.schemas.template import TemplateRead
+from app.schemas.template import TemplateDetailRead
 from app.schemas.venue import VenueRead
 
 
@@ -81,7 +81,17 @@ class WeddingRead(ORMModel):
 class WeddingDetailRead(WeddingRead):
     """Owner's editor view."""
 
-    template: TemplateRead
+    # `TemplateDetailRead`, not `TemplateRead`: the editor needs the template's
+    # `contents` to draw itself at all. A `wedding_sections` row carries only a
+    # `section_type`, so without these the editor has no label for a form, no
+    # `is_required` to decide whether "hide" and "delete" are allowed, and no
+    # `default_content` to show as a placeholder.
+    #
+    # Fetching them from `GET /templates/{id}` instead is not a fallback: that
+    # route filters `is_active`, so a couple whose design was later retired from
+    # the catalogue would get a 404 and a screen of unlabelled forms — while
+    # their invitation itself keeps working.
+    template: TemplateDetailRead
     sections: list[WeddingSectionRead] = Field(default_factory=list)
     venues: list[VenueRead] = Field(default_factory=list)
     media_assets: list[MediaAssetRead] = Field(default_factory=list)
@@ -101,6 +111,10 @@ class PublicWeddingRead(ORMModel):
     theme_color: str | None
     font_family: str | None
     template_id: uuid.UUID
+    # Which design to render. The guest page needs this, not the id: the
+    # frontend's component registry is keyed on the code, and a UUID differs
+    # between the local database and the deployed one.
+    template_code: str
     sections: list[WeddingSectionRead] = Field(default_factory=list)
     venues: list[VenueRead] = Field(default_factory=list)
     media_assets: list[MediaAssetRead] = Field(default_factory=list)

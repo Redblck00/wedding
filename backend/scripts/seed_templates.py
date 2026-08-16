@@ -41,6 +41,10 @@ class SectionSpec:
 
 @dataclass(frozen=True)
 class TemplateSpec:
+    # Registry key of the React component that draws this design. It is the
+    # template's natural key: the upsert below matches on it, so renaming a
+    # template no longer creates a duplicate row.
+    code: str
     name: str
     category_slug: str
     thumbnail_url: str
@@ -56,36 +60,46 @@ CATEGORIES: tuple[tuple[str, str], ...] = (
     ("Цэцэгт", "floral"),
 )
 
-# Placeholder art — replace with real Cloudinary URLs once the designs exist.
+# Placeholder art — replace with a real Cloudinary URL once the design has been
+# photographed. The catalogue links to /templates/{code} for the live preview,
+# so this only has to stand in for a thumbnail.
+#
+# The `.png` matters: placehold.co answers with SVG by default, and `next/image`
+# refuses to optimise SVG unless `dangerouslyAllowSVG` is set — because an SVG
+# can carry script, and serving one back from our own origin would be stored
+# XSS. Asking for a raster keeps that protection on.
 _THUMB = "https://placehold.co/600x900"
-
-
-def _couple_sections() -> tuple[SectionSpec, ...]:
-    """The three sections every design opens with, all required to publish."""
-    return (
-        SectionSpec(SectionType.BRIDE_INFO, "Сүйт бүсгүйн мэдээлэл", is_required=True),
-        SectionSpec(SectionType.GROOM_INFO, "Хүргэний мэдээлэл", is_required=True),
-        SectionSpec(SectionType.EVENT_SCHEDULE, "Хөтөлбөр", {"entries": []}, is_required=True),
-    )
 
 
 TEMPLATES: tuple[TemplateSpec, ...] = (
     TemplateSpec(
-        name="Сонгодог алт",
-        category_slug="classic",
-        thumbnail_url=f"{_THUMB}/1a1a1a/d4af37?text=Songodog+Alt",
-        preview_url=None,
+        code="rose-envelope",
+        name="Сарнайн дугтуй",
+        category_slug="floral",
+        thumbnail_url=f"{_THUMB}/fff0f5/694951.png?text=Rose+Envelope",
+        # The catalogue can show the design itself rather than a picture of it.
+        preview_url="/templates/rose-envelope",
         price=Decimal("0"),
         is_free=True,
+        # Exactly the sections this design draws, in the order the editor should
+        # ask for them. A section listed here that the template never renders is
+        # worse than a missing one: the couple fills in bank details or a dress
+        # code and no guest ever sees them. `gift_info` and `dress_code` are left
+        # out for that reason — add them here the day the design grows a panel
+        # for each.
         sections=(
-            *_couple_sections(),
-            SectionSpec(
-                SectionType.WEDDING_STORY,
-                "Бидний түүх",
-                {"intro": "", "entries": []},
-            ),
+            SectionSpec(SectionType.BRIDE_INFO, "Сүйт бүсгүйн мэдээлэл", is_required=True),
+            SectionSpec(SectionType.GROOM_INFO, "Хүргэний мэдээлэл", is_required=True),
+            SectionSpec(SectionType.WEDDING_STORY, "Бидний түүх", {"intro": "", "entries": []}),
+            # Required, and not only because an invitation needs a schedule: the
+            # countdown reads its target time from the first entry here, since
+            # `weddings.wedding_date` is a bare DATE with no clock on it.
+            SectionSpec(SectionType.EVENT_SCHEDULE, "Хөтөлбөр", {"entries": []}, is_required=True),
             SectionSpec(SectionType.VENUE, "Байршил", {"heading": "Хаана болох вэ?"}),
-            SectionSpec(SectionType.GALLERY, "Зургийн цомог", {"layout": "grid"}),
+            # No `layout` default: this design lays the photographs out in its
+            # own rhythm and ignores the field. Shipping one would put a control
+            # in the editor that changes nothing.
+            SectionSpec(SectionType.GALLERY, "Зургийн цомог"),
             SectionSpec(
                 SectionType.RSVP_FORM,
                 "Ирэхээ баталгаажуулах",
@@ -94,53 +108,11 @@ TEMPLATES: tuple[TemplateSpec, ...] = (
             SectionSpec(
                 SectionType.BACKGROUND_MUSIC,
                 "Дэвсгэр хөгжим",
-                # autoplay stays off: browsers block sound-on autoplay anyway,
-                # so a template promising it would just look broken.
+                # Off by default, not because it cannot work — the envelope tap
+                # gives this design the user activation browsers require — but
+                # because a guest opening an invitation in a meeting should not
+                # be ambushed. The couple turns it on knowing that.
                 {"autoplay": False, "loop": True},
-            ),
-            SectionSpec(SectionType.GIFT_INFO, "Бэлгийн мэдээлэл", {"accounts": []}),
-            SectionSpec(
-                SectionType.DRESS_CODE,
-                "Хувцаслалт",
-                {"description": "", "colors": ["#d4af37", "#1a1a1a", "#f5f5f0"]},
-            ),
-        ),
-    ),
-    TemplateSpec(
-        name="Минимал цагаан",
-        category_slug="modern",
-        thumbnail_url=f"{_THUMB}/ffffff/333333?text=Minimal+Tsagaan",
-        preview_url=None,
-        price=Decimal("0"),
-        is_free=True,
-        sections=(
-            *_couple_sections(),
-            SectionSpec(SectionType.VENUE, "Байршил"),
-            SectionSpec(SectionType.GALLERY, "Зургийн цомог", {"layout": "masonry"}),
-            SectionSpec(
-                SectionType.RSVP_FORM,
-                "Ирэхээ баталгаажуулах",
-                {"heading": "Ирэхээ мэдэгдэнэ үү", "ask_guest_count": True},
-            ),
-        ),
-    ),
-    TemplateSpec(
-        name="Цэцэгт навч",
-        category_slug="floral",
-        thumbnail_url=f"{_THUMB}/f6efe6/8a9a5b?text=Tsetsegt+Navch",
-        preview_url=None,
-        price=Decimal("29900"),
-        is_free=False,
-        sections=(
-            *_couple_sections(),
-            SectionSpec(SectionType.WEDDING_STORY, "Бидний түүх", {"intro": "", "entries": []}),
-            SectionSpec(SectionType.VENUE, "Байршил", {"heading": "Хаана болох вэ?"}),
-            SectionSpec(SectionType.GALLERY, "Зургийн цомог", {"layout": "carousel"}),
-            SectionSpec(SectionType.RSVP_FORM, "Ирэхээ баталгаажуулах", {"ask_guest_count": True}),
-            SectionSpec(
-                SectionType.DRESS_CODE,
-                "Хувцаслалт",
-                {"description": "", "colors": ["#8a9a5b", "#f6efe6"]},
             ),
         ),
     ),
@@ -163,13 +135,15 @@ def _upsert_categories(db: Session) -> dict[str, TemplateCategory]:
 
 
 def _upsert_template(db: Session, spec: TemplateSpec, category: TemplateCategory) -> Template:
-    # Matched on name: `templates` has no natural key other than its id, and an
-    # id would have to be hard-coded here to survive a re-run.
-    template = db.scalar(select(Template).where(Template.name == spec.name))
+    # Matched on `code`, the one column that is stable across databases and
+    # across renames — the id is generated per database and the name is display
+    # text an admin may reword.
+    template = db.scalar(select(Template).where(Template.code == spec.code))
     if template is None:
-        template = Template(name=spec.name)
+        template = Template(code=spec.code)
         db.add(template)
 
+    template.name = spec.name
     template.category = category
     template.thumbnail_url = spec.thumbnail_url
     template.preview_url = spec.preview_url
@@ -217,6 +191,27 @@ def _upsert_contents(template: Template, specs: tuple[SectionSpec, ...]) -> None
             template.contents.remove(row)
 
 
+def _deactivate_unlisted(db: Session, live_codes: set[str]) -> list[str]:
+    """Hides catalogue rows this file no longer describes.
+
+    Deactivated, never deleted: `weddings.template_id` has no ON DELETE, so a
+    DELETE fails the moment one invitation uses the design — and an invitation
+    already built on it must keep rendering. `is_active=False` only takes it out
+    of the picker.
+
+    Without this, a template dropped from the specs above stays in the catalogue
+    forever, pointing at a component the frontend does not ship.
+    """
+    retired = []
+
+    for template in db.scalars(select(Template).where(Template.is_active.is_(True))):
+        if template.code not in live_codes:
+            template.is_active = False
+            retired.append(template.code)
+
+    return retired
+
+
 def main() -> None:
     # The template names are Cyrillic and a Windows console defaults to cp1252,
     # which cannot encode them — printing one raises UnicodeEncodeError and
@@ -231,6 +226,10 @@ def main() -> None:
             template = _upsert_template(db, spec, categories[spec.category_slug])
             price = "free" if spec.is_free else f"{spec.price:.0f}₮"
             print(f"  - {template.name} ({spec.category_slug}, {price}, {len(spec.sections)} sections)")
+
+        retired = _deactivate_unlisted(db, {spec.code for spec in TEMPLATES})
+        for code in retired:
+            print(f"  - {code}: deactivated (no longer in the specs above)")
 
         db.commit()
 

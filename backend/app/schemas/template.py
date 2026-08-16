@@ -26,8 +26,15 @@ class TemplateContentRead(ORMModel):
     is_enabled: bool
 
 
+# Lowercase Latin letters and digits with single hyphens between them — the same
+# shape as a wedding slug, because this string also lands in a URL
+# (/templates/{code}) as well as in the frontend's component registry.
+TEMPLATE_CODE_PATTERN = r"^[a-z0-9]+(?:-[a-z0-9]+)*$"
+
+
 class TemplateRead(ORMModel):
     id: uuid.UUID
+    code: str
     name: str
     thumbnail_url: str
     preview_url: str | None
@@ -39,7 +46,12 @@ class TemplateRead(ORMModel):
 
 
 class TemplateDetailRead(TemplateRead):
-    """Marketplace detail view — includes the section list the editor will seed from."""
+    """Template plus its section definitions.
+
+    Served by the marketplace detail view *and* embedded in the owner's
+    `WeddingDetailRead` — the editor draws its forms from `contents`, so it must
+    not have to ask the marketplace for them.
+    """
 
     contents: list[TemplateContentRead] = Field(default_factory=list)
 
@@ -47,6 +59,13 @@ class TemplateDetailRead(TemplateRead):
 class TemplateCreate(BaseModel):
     """Admin-only."""
 
+    code: str = Field(
+        min_length=3,
+        max_length=60,
+        pattern=TEMPLATE_CODE_PATTERN,
+        description="Registry key of the design's React component, e.g. 'rose-envelope'.",
+        examples=["rose-envelope"],
+    )
     name: str = Field(min_length=1, max_length=150)
     category_id: uuid.UUID | None = None
     thumbnail_url: str
@@ -57,7 +76,13 @@ class TemplateCreate(BaseModel):
 
 
 class TemplateUpdate(BaseModel):
-    """Admin-only. Every field optional — this is a PATCH body."""
+    """Admin-only. Every field optional — this is a PATCH body.
+
+    `code` is deliberately absent. It names a component that ships with the
+    frontend, so editing it from an admin form would point live invitations at a
+    design that does not exist in the deployed bundle. Renaming one means
+    shipping the new component first, then a migration — not a PATCH.
+    """
 
     name: str | None = Field(default=None, min_length=1, max_length=150)
     category_id: uuid.UUID | None = None

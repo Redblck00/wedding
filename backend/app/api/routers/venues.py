@@ -5,11 +5,30 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.api.deps import OwnedWedding, SessionDep
+from app.models.media_asset import MediaAsset
 from app.models.venue import Venue
 from app.schemas.common import ErrorResponse
 from app.schemas.venue import VenueCreate, VenueRead, VenueUpdate
 
 router = APIRouter(prefix="/weddings", tags=["venues"])
+
+
+def _assert_photo_owned(db: Session, wedding_id: uuid.UUID, media_id: uuid.UUID | None) -> None:
+    """Scoped to this wedding for the same reason `media.upload_media` scopes
+    `section_id`: without it a caller could hang somebody else's photo on their
+    own venue by passing its id, and the guest page would publish it.
+    """
+    if media_id is None:
+        return
+
+    owned = db.scalar(
+        select(MediaAsset.id).where(
+            MediaAsset.id == media_id,
+            MediaAsset.wedding_id == wedding_id,
+        )
+    )
+    if owned is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Media not found")
 
 
 def _get_venue(db: Session, wedding_id: uuid.UUID, venue_id: uuid.UUID) -> Venue:
@@ -37,8 +56,11 @@ def list_venues(wedding: OwnedWedding, db: SessionDep) -> list[Venue]:
     "/{wedding_id}/venues",
     response_model=VenueRead,
     status_code=status.HTTP_201_CREATED,
+    responses={404: {"model": ErrorResponse}},
 )
 def create_venue(payload: VenueCreate, wedding: OwnedWedding, db: SessionDep) -> Venue:
+    _assert_photo_owned(db, wedding.id, payload.photo_media_id)
+
     venue = Venue(wedding_id=wedding.id, **payload.model_dump())
     db.add(venue)
     db.commit()
@@ -59,7 +81,13 @@ def update_venue(
 ) -> Venue:
     venue = _get_venue(db, wedding.id, venue_id)
 
-    for field, value in payload.model_dump(exclude_unset=True).items():
+    changes = payload.model_dump(exclude_unset=True)
+    # Only when the field was actually sent — `exclude_unset` lets an explicit
+    # null through, which clears the photo and needs no ownership check.
+    if "photo_media_id" in changes:
+        _assert_photo_owned(db, wedding.id, changes["photo_media_id"])
+
+    for field, value in changes.items():
         setattr(venue, field, value)
 
     db.commit()

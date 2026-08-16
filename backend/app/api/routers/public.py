@@ -34,7 +34,9 @@ def read_public_wedding(slug: str, db: SessionDep) -> PublicWeddingRead:
             Wedding.status == WeddingStatus.PUBLISHED,
         )
         # Without these the page costs one query per section, venue and photo.
+        # `template` is loaded for its `code` alone — the design to render.
         .options(
+            selectinload(Wedding.template),
             selectinload(Wedding.sections),
             selectinload(Wedding.venues),
             selectinload(Wedding.media_assets),
@@ -56,6 +58,7 @@ def read_public_wedding(slug: str, db: SessionDep) -> PublicWeddingRead:
         theme_color=wedding.theme_color,
         font_family=wedding.font_family,
         template_id=wedding.template_id,
+        template_code=wedding.template.code,
         sections=[WeddingSectionRead.model_validate(section) for section in visible_sections],
         venues=[
             VenueRead.model_validate(venue)
