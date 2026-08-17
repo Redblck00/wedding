@@ -38,9 +38,9 @@ function WeddingDayCard({ displayDate, className = "" }) {
       <div className="mx-auto mb-5 h-px w-11 bg-[#CFAAB2]" />
 
       <p className="font-invite-serif text-[0.85rem] leading-[1.8] text-[#916C74]">
-        Хайр, инээд, насан туршийн
+        Хайр, инээд,дурсамж
         <br />
-         АМВДАРДЛЫН БАЯР БАЯГСЛАН ТА 
+         бидний хуримын баярт мөчүүдийг
         <br />
         хамт тэмдэглээрэй.
       </p>
