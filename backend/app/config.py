@@ -1,4 +1,15 @@
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# The scheme SQLAlchemy needs to reach for psycopg 3. `postgresql://` on its own
+# resolves to the psycopg2 dialect, which this project does not install.
+_PSYCOPG_SCHEME = "postgresql+psycopg://"
+
+# What managed Postgres hands out. Render and Neon write the first, Heroku and
+# anything modelled on it still write the second — neither names a driver, and
+# neither is editable where it is generated: on Render the value arrives through
+# a database link, not as text somebody types.
+_DRIVERLESS_SCHEMES = ("postgresql://", "postgres://")
 
 
 class Settings(BaseSettings):
@@ -10,6 +21,35 @@ class Settings(BaseSettings):
 
     # --- Database ---
     database_url: str
+
+    @field_validator("database_url")
+    @classmethod
+    def _use_psycopg_driver(cls, value: str) -> str:
+        """Points a driverless Postgres URL at psycopg 3.
+
+        Without this, deploying against a managed database fails at *import* —
+        `create_engine("postgresql://…")` picks the psycopg2 dialect and raises
+        `ModuleNotFoundError: No module named 'psycopg2'`, which names neither
+        the setting at fault nor the fix. The host is the one place the operator
+        cannot easily correct it, so it is corrected here instead.
+
+        A scheme that already names its driver is left alone: someone who wrote
+        `postgresql+asyncpg://` meant it, and silently overruling that would be
+        the worse surprise.
+        """
+        url = value.strip()
+
+        for scheme in _DRIVERLESS_SCHEMES:
+            if url.startswith(scheme):
+                return f"{_PSYCOPG_SCHEME}{url[len(scheme):]}"
+
+        if not url.startswith("postgresql+"):
+            raise ValueError(
+                f"DATABASE_URL must be a PostgreSQL URL, got {url.split('://')[0]!r}. "
+                f"Use {_PSYCOPG_SCHEME}user:password@host/database"
+            )
+
+        return url
 
     # --- Auth ---
     jwt_secret_key: str

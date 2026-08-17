@@ -1,0 +1,25 @@
+# Docker does not read .gitignore, so everything that must stay out of the image
+# has to be named again here.
+
+# 171MB of packages built for Windows — useless inside a Linux image, and the
+# Dockerfile's own `pip install` builds the real ones regardless.
+venv/
+.venv/
+
+__pycache__/
+*.py[cod]
+
+# Real credentials. Two reasons this must not ship: it would sit in an image
+# layer for anyone who pulls the image, and pydantic-settings falls back to the
+# .env file for anything the environment does not set — so a variable forgotten
+# on the host would silently pick up a development value instead of failing.
+.env
+.env.*
+!.env.example
+
+.git/
+.gitignore
+.dockerignore
+
+.pytest_cache/
+.ruff_cache/
