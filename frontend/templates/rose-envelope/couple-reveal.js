@@ -10,12 +10,12 @@ import Reveal from "./reveal";
 import { useScrollProgress } from "./use-scroll-progress";
 
 const CAPTIONS = [
-  "Дурсамж",
-  "Хоёулаа",
-  "Үргэлж",
-  "Мөнхөд",
-  "Гэрэл",
-  "Хайр",
+  "THE LITTLE THINGS",
+  "JUST US",
+"Always",
+  "Forever",
+  "our story",
+  "be loyalty",
 ];
 
 /**
@@ -271,7 +271,7 @@ function HorizontalGallery({ photos }) {
         <div className="absolute left-6 top-8 z-20 md:left-12 md:top-10">
           <p className="font-invite-serif text-xs tracking-[0.45em] text-[#A77B83]">Gallery</p>
           <p className="mt-1 font-invite-display italic text-[1.35rem] text-[#694951] md:text-[1.5rem]">
-            Бидний мөчүүд
+            Хуримын зураг
           </p>
         </div>
 

@@ -86,7 +86,7 @@ export default function Countdown({ targetDate }) {
           <h2 className="font-invite-display italic text-5xl text-[#694951] md:text-7xl">
             Until 
             <br />
-            We Say I Do
+            We say I do
           </h2>
         </Reveal>
 

@@ -40,7 +40,7 @@ function WeddingDayCard({ displayDate, className = "" }) {
       <p className="font-invite-serif text-[0.85rem] leading-[1.8] text-[#916C74]">
         Хайр, инээд, насан туршийн
         <br />
-        хамтын аяллыг бидэнтэй
+         АМВДАРДЛЫН БАЯР БАЯГСЛАН ТА 
         <br />
         хамт тэмдэглээрэй.
       </p>
@@ -105,7 +105,7 @@ export default function Timeline({ entries, displayDate }) {
 
           <Reveal delay={300} className="mt-6">
             <p className="text-center font-invite-serif text-[9px] uppercase tracking-[0.4em] text-[#B1848C]">
-              Доош гүйлгэнэ үү
+              Доош үзэх
             </p>
           </Reveal>
         </div>
