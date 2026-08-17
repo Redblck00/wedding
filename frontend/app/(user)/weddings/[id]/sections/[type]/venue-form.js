@@ -4,6 +4,12 @@ import { useActionState, useRef, useState } from "react";
 import Image from "next/image";
 
 import { removeVenuePhoto, saveVenueSection, uploadVenuePhoto } from "@/app/actions/venues";
+import {
+  MAX_PAYLOAD_BYTES,
+  MAX_SOURCE_BYTES,
+  MAX_SOURCE_MB,
+  compressImage,
+} from "@/lib/compress-image";
 import FormField from "@/components/form-field";
 import SubmitButton from "@/components/submit-button";
 import SavedNotice from "./saved-notice";
@@ -22,14 +28,6 @@ import SavedNotice from "./saved-notice";
  * comes back and travels with the row, so the picture and the address are still
  * committed together.
  */
-
-/** Matches `MAX_UPLOAD_BYTES` in `media_service.py`. Checked here only to fail
- *  fast — the backend's refusal is the real one. */
-const MAX_BYTES = 20 * 1024 * 1024;
-
-/** Derived, so the number the couple reads can never drift from the one that is
- *  enforced a line above it. */
-const MAX_MB = MAX_BYTES / (1024 * 1024);
 
 let nextRowId = 0;
 
@@ -78,17 +76,28 @@ export default function VenueForm({ weddingId, content, venues }) {
   async function choosePhoto(row, file) {
     if (!file) return;
 
-    if (file.size > MAX_BYTES) {
-      setPhotoError(`«${file.name}» ${MAX_MB} MB-аас том байна.`);
+    if (file.size > MAX_SOURCE_BYTES) {
+      setPhotoError(`«${file.name}» ${MAX_SOURCE_MB} MB-аас том байна.`);
       return;
     }
 
     setPhotoError(null);
     setUploadingKey(row.key);
 
+    // Shrunk before it leaves the browser — see `lib/compress-image.js`. The
+    // spinner is already showing, which is the right moment for it: the work
+    // takes a moment on a large photo and it is part of the upload.
+    const upload = await compressImage(file);
+
+    if (upload.size > MAX_PAYLOAD_BYTES) {
+      setUploadingKey(null);
+      setPhotoError(`«${file.name}» хэт том байна. Өөр хэлбэрээр хадгалж үзнэ үү.`);
+      return;
+    }
+
     const body = new FormData();
     body.append("wedding_id", weddingId);
-    body.append("file", file);
+    body.append("file", upload);
 
     // Replacing a picture deletes the old one first. Skipping it would leave a
     // file in Cloudinary that nothing points at any more and no screen can

@@ -191,6 +191,13 @@ function HorizontalGallery({ photos }) {
   const [track, setTrack] = useState({ maxX: 0, viewport: 0, cards: [] });
   const [screen, setScreen] = useState({ compact: false, reduced: false });
 
+  // The card under the cursor or the finger, which is shown unblurred whatever
+  // the depth maths says. Pointer events rather than `:hover`, for two reasons:
+  // the blur is an inline style and a stylesheet rule cannot outrank one, and
+  // pointer events are the same events for a mouse and a touch, so this needs no
+  // second path for phones.
+  const [touched, setTouched] = useState(null);
+
   useEffect(() => {
     const element = trackRef.current;
     if (!element) return;
@@ -303,12 +310,36 @@ function HorizontalGallery({ photos }) {
             // Saturates at ±0.45 of the screen, so a card is fully "away" by the
             // time it reaches the edge rather than only once it has left.
             const away = Math.min(1, Math.abs(offset) / 0.45);
-            const blur = away * depth.blur;
+
+            // Pointing at a photograph is asking to see it, and answering that
+            // with a blurred one is the wrong answer. The depth effect exists to
+            // push the edges of the track back; it has no business standing
+            // between a guest and the picture they just reached for.
+            //
+            // Only the blur clears. `shrink` and `fade` still track the card's
+            // position, so the row keeps its depth and the hovered card does not
+            // jump out of the arrangement.
+            const focused = touched === index;
+            const blur = focused ? 0 : away * depth.blur;
 
             return (
               <div key={photo.id ?? index} className="flex shrink-0 flex-col gap-3">
                 <div
                   className="group relative overflow-hidden bg-[#F2DDE3]"
+                  onPointerEnter={() => setTouched(index)}
+                  // Guarded rather than a bare `setTouched(null)`: moving from
+                  // one card to the next fires enter and leave in an order the
+                  // spec does not fix, and an unguarded leave would wipe the
+                  // entry the new card had just made.
+                  onPointerLeave={() =>
+                    setTouched((current) => (current === index ? null : current))
+                  }
+                  // A touch that turns into a scroll is cancelled, not left —
+                  // without this the card a guest brushed on the way past would
+                  // stay clear for the rest of the session.
+                  onPointerCancel={() =>
+                    setTouched((current) => (current === index ? null : current))
+                  }
                   style={{
                     // Height is the driven axis and width comes from the ratio,
                     // so the picture is never cropped whatever shape it is —
@@ -346,7 +377,23 @@ function HorizontalGallery({ photos }) {
                       // Omitted entirely rather than set to `blur(0px)`: a
                       // filter property promotes the element to its own
                       // compositor layer even when it does nothing.
-                      filter: blur > 0.05 ? `blur(${blur.toFixed(2)}px)` : undefined,
+                      //
+                      // The focused card is the one exception, and it has to be.
+                      // A transition cannot run to or from `none`, so dropping
+                      // the property is what makes the blur vanish in one frame
+                      // instead of easing away — the layer costs one card's
+                      // worth of compositing while a pointer is on it, which is
+                      // the cheaper half of that trade.
+                      filter:
+                        blur > 0.05
+                          ? `blur(${blur.toFixed(2)}px)`
+                          : focused
+                            ? "blur(0px)"
+                            : undefined,
+                      // Named, not `all`: the transform on this same element is
+                      // rewritten every scroll frame to drive the parallax, and
+                      // easing that would turn a live effect into a lagging one.
+                      transition: "filter 0.25s ease-out",
                     }}
                   >
                     <Image

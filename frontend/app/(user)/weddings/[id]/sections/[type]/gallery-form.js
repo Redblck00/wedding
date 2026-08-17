@@ -5,16 +5,14 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 
 import { deletePhoto, saveGallery, uploadPhoto } from "@/app/actions/gallery";
+import {
+  MAX_PAYLOAD_BYTES,
+  MAX_SOURCE_BYTES,
+  MAX_SOURCE_MB,
+  compressImage,
+} from "@/lib/compress-image";
 import FormField from "@/components/form-field";
 import SubmitButton from "@/components/submit-button";
-
-/** Matches `MAX_UPLOAD_BYTES` in `media_service.py`. Checked here only to fail
- *  fast — the backend's refusal is the real one. */
-const MAX_BYTES = 20 * 1024 * 1024;
-
-/** Derived, so the number the couple reads can never drift from the one that is
- *  enforced a line above it. */
-const MAX_MB = MAX_BYTES / (1024 * 1024);
 const MIN_PHOTOS = 3;
 
 /**
@@ -86,8 +84,8 @@ export default function GalleryForm({ weddingId, photos, heroMediaId, finalMedia
     let uploaded = 0;
 
     for (const [index, file] of files.entries()) {
-      if (file.size > MAX_BYTES) {
-        failures.push({ name: file.name, reason: `${MAX_MB} MB-аас том байна` });
+      if (file.size > MAX_SOURCE_BYTES) {
+        failures.push({ name: file.name, reason: `${MAX_SOURCE_MB} MB-аас том байна` });
         continue;
       }
 
@@ -96,9 +94,24 @@ export default function GalleryForm({ weddingId, photos, heroMediaId, finalMedia
       // to hold several large uploads open at once.
       setUploading(files.length - index);
 
+      // Shrunk here, before it goes anywhere. A phone photo is several times
+      // what a Server Action is allowed to receive, and the compressed copy is
+      // also the whole difference between a slow upload and an instant one on
+      // mobile data.
+      const upload = await compressImage(file);
+
+      // Only reachable when compression fell back to the original — a HEIC this
+      // browser cannot decode, most likely. Said plainly here, because the
+      // alternative is the platform refusing it with nothing the couple can
+      // read.
+      if (upload.size > MAX_PAYLOAD_BYTES) {
+        failures.push({ name: file.name, reason: "хэт том, өөр хэлбэрээр хадгалж үзнэ үү" });
+        continue;
+      }
+
       const body = new FormData();
       body.append("wedding_id", weddingId);
-      body.append("file", file);
+      body.append("file", upload);
 
       const result = await uploadPhoto(null, body);
 
@@ -187,7 +200,7 @@ export default function GalleryForm({ weddingId, photos, heroMediaId, finalMedia
         </button>
 
         <p className="mt-2 text-xs text-muted">
-          JPEG, PNG, WebP, HEIC · нэг зураг {MAX_MB} MB хүртэл
+          JPEG, PNG, WebP, HEIC · нэг зураг {MAX_SOURCE_MB} MB хүртэл
         </p>
       </div>
 

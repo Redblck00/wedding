@@ -122,10 +122,33 @@ export default function RoseEnvelope({ invitation, preview = false }) {
                 and no tint over it, so it looks like the picture the couple
                 uploaded rather than a pink version of it.
 
-                `object-center` is the point of it on a phone: a landscape shot
-                in a portrait viewport keeps its middle, which is where a couple
-                stands in almost every wedding photograph. Cropping to the top or
-                bottom would show a sky or a floor.
+                Where the crop is taken from has to change with the screen,
+                because which way the photograph is being squeezed changes with
+                it.
+
+                On a phone the viewport is portrait and so is the photograph, so
+                `cover` trims a little from the sides and the middle is exactly
+                right — that is where a couple stands in almost every wedding
+                picture, and anchoring to the top or bottom would frame a sky or
+                a floor instead.
+
+                On a notebook the viewport is landscape and the photograph still
+                is not. Covering the width scales it far taller than the screen,
+                and now the trim is vertical and severe: the middle of a portrait
+                is the dress and the hands, and the faces are above the cut. Same
+                photograph, opposite problem.
+
+                So from `md:` up the crop moves toward the top — but not all the
+                way to it. `object-top` overshot: the top of a studio portrait is
+                ceiling and curtain, and pinning there pushed the couple back
+                down out of frame from the other side.
+
+                `20%` is the one number to tune. It reads as "line up the point a
+                fifth of the way down the photograph with the point a fifth of
+                the way down the screen", so raising it takes the crop from
+                further down the picture and lifts the subject up the screen;
+                lowering it does the reverse. Nothing else here has to change
+                with it.
 
                 Legibility is carried entirely by the type instead — white with a
                 shadow, below. That is the one treatment that costs the
@@ -141,7 +164,7 @@ export default function RoseEnvelope({ invitation, preview = false }) {
                     // opens, so it is worth fetching ahead of the rest.
                     preload
                     sizes="100vw"
-                    className="object-cover object-center"
+                    className="object-cover object-center md:object-[50%_20%]"
                   />
                 </div>
               ) : null}
