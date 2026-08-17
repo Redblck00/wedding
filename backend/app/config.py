@@ -73,17 +73,29 @@ class Settings(BaseSettings):
     cors_origins: str = "http://localhost:3000"
 
     # --- Public RSVP throttle ---
-    # Guests are anonymous, so an address is the only handle there is — and it is
-    # a poor one: Mongolian mobile carriers run CGNAT, so a whole neighbourhood
-    # can share one public IP, as can every guest on a venue's wifi. These limits
-    # are therefore sized to stop a script flooding the table, NOT to ration
-    # replies per person. Anything tight enough to mean "one guest, one reply"
-    # would silently turn away real guests, which is the worse failure: a
-    # duplicate row is visible and the couple can delete it, a refused guest is
-    # invisible to everyone.
-    rsvp_burst_limit: int = 10
+    # Guests are anonymous, so an address is the only handle there is — and here
+    # it is not a handle at all.
+    #
+    # A reply reaches this endpoint as browser -> Vercel -> Render: `submitRsvp`
+    # is a Server Action, and the guest's browser never talks to the API. The
+    # frontend's `apiFetch` sends no X-Forwarded-For, so every reply to a given
+    # invitation arrives from the same address whatever `trusted_proxy_count`
+    # says. These are therefore **per-invitation** limits, not per-guest ones —
+    # the whole guest list shares one bucket.
+    #
+    # Sized accordingly: a flooding script does hundreds of requests a second and
+    # trips 40/minute just as instantly, while a crowd scanning the QR at the
+    # venue now gets through. At the old 10/minute a party of 30 replying
+    # together had 20 of them refused, measured — and a refused guest is the
+    # worse failure, because a duplicate row is visible and deletable while a
+    # guest who gave up is invisible to everyone.
+    #
+    # Making these per-guest again means forwarding the real address from the
+    # Server Action and raising `trusted_proxy_count` to match the hop count
+    # Render leaves behind. Until then, tightening these turns guests away.
+    rsvp_burst_limit: int = 40
     rsvp_burst_window_seconds: int = 60
-    rsvp_hourly_limit: int = 60
+    rsvp_hourly_limit: int = 300
     rsvp_hourly_window_seconds: int = 3600
 
     # An identical reply resubmitted inside this window is treated as a double
