@@ -22,12 +22,15 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
-          node-version: 20
+          # 22, not 20: this job exists to catch what Vercel would catch, and
+          # Vercel builds on 22. Testing an older runtime than the one that
+          # ships is testing the wrong thing.
+          node-version: 22
           cache: npm
           cache-dependency-path: frontend/package-lock.json
 
@@ -51,17 +54,40 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
+          # Matches the Dockerfile's base image, so this job is exercising the
+          # interpreter the service actually runs on.
           python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
 
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
+      # The one check with teeth while there are no tests.
+      #
+      # `pytest` below passes on an empty suite, so without this the job proves
+      # only that the dependencies install — a typo in any module would ship
+      # green. Importing `app.main` pulls in every router, model and schema, so
+      # it fails on a broken import the way the container would on startup.
+      #
+      # The settings are required and read at import, hence the dummy values.
+      # Nothing connects: the engine is created lazily, so a host that does not
+      # exist is never dialled.
+      - name: Smoke check — the app imports
+        env:
+          DATABASE_URL: postgresql://ci:ci@localhost:5432/ci
+          JWT_SECRET_KEY: ci-only-not-a-real-secret
+        run: python -c "from app.main import app; print(f'{len(app.openapi()[\"paths\"])} paths')"
+
+      # Exit code 5 is pytest's "no tests were collected", which is the expected
+      # result today and must not fail the build. Every other non-zero code
+      # still does. `$?` inside the `||` branch is pytest's own status.
       - name: Run tests
-        run: pytest --no-header -q ||  [ $? -eq 5 ] 
+        run: pytest --no-header -q || [ $? -eq 5 ]
