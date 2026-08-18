@@ -35,8 +35,13 @@ function loadPlayerApi() {
   return apiPromise;
 }
 
-/** How long to wait for a play attempt before treating silence as a refusal. */
-const REFUSAL_MS = 1200;
+/**
+ * How long to wait for a play attempt before treating *silence* — not slowness
+ * — as a refusal. Only a player that has not even begun to buffer by now has
+ * been turned down; anything that is loading is left alone however long it
+ * takes.
+ */
+const REFUSAL_MS = 2000;
 
 /**
  * Background music, as a small floating toggle over the invitation.
@@ -62,8 +67,13 @@ const REFUSAL_MS = 1200;
  * So playback is attempted in three stages, each one a step further from what
  * the couple asked for and a step closer to something a browser will allow:
  *
- *   1. Play with sound. This is what a desktop and most Android browsers give.
- *   2. If nothing is playing a beat later, mute and play again. Muted autoplay
+ *   1. Play with sound, both through the `autoplay` parameter the embed carries
+ *      and through `playVideo()` once it is ready. This is what a desktop and
+ *      most Android browsers give, and it is the case to protect: a guest who
+ *      opens the invitation from a link hears the song without touching
+ *      anything.
+ *   2. If the player has not even begun to load two seconds later — buffering
+ *      is not refusal — mute and play again. Muted autoplay
  *      is permitted almost everywhere audible autoplay is not, so the song is
  *      running and in time — it simply cannot be heard yet. The button says so
  *      and one tap unmutes it, because that tap is the activation that was
@@ -131,6 +141,11 @@ export default function MusicPlayer({ videoId, loop, autoplay = false, startSeco
       const mount = document.createElement("div");
       box.appendChild(mount);
 
+      // Playing or buffering — either way the browser said yes, and the song is
+      // on its way. Only a player sitting still has been refused.
+      const started = (state) =>
+        state === YT.PlayerState.PLAYING || state === YT.PlayerState.BUFFERING;
+
       const attempt = (target) => {
         target.playVideo();
 
@@ -138,18 +153,24 @@ export default function MusicPlayer({ videoId, loop, autoplay = false, startSeco
          * A browser refusing sound refuses it silently — no error, no event,
          * the player simply never leaves `UNSTARTED`. There is nothing to
          * catch, so the refusal has to be *timed*.
+         *
+         * `BUFFERING` counts as a yes, and getting that wrong is what broke
+         * autoplay for every guest who had it working: the first version of
+         * this treated anything short of `PLAYING` a second in as a refusal,
+         * and on a phone a video is still fetching its first bytes at that
+         * point. So autoplay the browser had allowed was muted by the code
+         * written to rescue it, and the guest was asked to tap for sound they
+         * already had coming.
          */
         rescue = window.setTimeout(() => {
-          if (cancelled || target.getPlayerState() === YT.PlayerState.PLAYING) return;
+          if (cancelled || started(target.getPlayerState())) return;
 
           target.mute();
           target.playVideo();
 
           rescue = window.setTimeout(() => {
             if (cancelled) return;
-            setStatus(
-              target.getPlayerState() === YT.PlayerState.PLAYING ? "muted" : "blocked",
-            );
+            setStatus(started(target.getPlayerState()) ? "muted" : "blocked");
           }, REFUSAL_MS);
         }, REFUSAL_MS);
       };
@@ -160,6 +181,17 @@ export default function MusicPlayer({ videoId, loop, autoplay = false, startSeco
         // should not collect a YouTube cookie for hearing it.
         host: "https://www.youtube-nocookie.com",
         playerVars: {
+          /*
+           * The autoplay the old bare iframe carried in its URL, and the one
+           * thing here that browsers treat as the page's own intent rather than
+           * a script's afterthought. Asking through `playVideo()` alone was a
+           * downgrade: a guest who opened the invitation from a plain link had
+           * music, and after that change had a button to press.
+           *
+           * Both are used now — this starts it, `onReady` asks again for the
+           * browsers that ignore the parameter on a dynamically built iframe.
+           */
+          autoplay: 1,
           // `playsinline` is not cosmetic on iOS. Without it the phone hands
           // the video to the fullscreen native player, which takes over the
           // screen and cannot start without a tap of its own — an invitation
@@ -190,6 +222,11 @@ export default function MusicPlayer({ videoId, loop, autoplay = false, startSeco
           onReady: (event) => attempt(event.target),
           onStateChange: (event) => {
             if (cancelled) return;
+
+            // The player has moved, so there is nothing left for the watchdog
+            // above to rescue — and every reason not to let it mute a song
+            // that is on its way.
+            if (started(event.data)) window.clearTimeout(rescue);
 
             if (event.data === YT.PlayerState.PLAYING) {
               // The one place both halves of the question are answered at once:
