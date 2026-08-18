@@ -126,11 +126,22 @@ export default function RoseEnvelope({ invitation, preview = false }) {
                 because which way the photograph is being squeezed changes with
                 it.
 
-                On a phone the viewport is portrait and so is the photograph, so
-                `cover` trims a little from the sides and the middle is exactly
-                right — that is where a couple stands in almost every wedding
-                picture, and anchoring to the top or bottom would frame a sky or
-                a floor instead.
+                On a phone the picture is the background and it fills the
+                screen, which is a deliberate trade and worth naming: a phone
+                viewport is about 9:19.5 and a studio photograph is about 3:2,
+                so `cover` scales it until it fills the height and roughly a
+                third of its width is left on screen. What `cover` never does is
+                squeeze it — the ratio is kept exactly and the trim is taken off
+                the sides, so a wide group shot loses whoever stands at its
+                edges.
+
+                `object-center` is the crop to take when only a slice can be
+                shown: a couple stands in the middle of almost every wedding
+                picture, and anchoring top or bottom would frame a ceiling or a
+                floor. If a particular photograph crops badly here, the fix is
+                to hand the couple a wall of it — upload a portrait-shaped
+                version as the hero, or nudge this one number per invitation —
+                not to letterbox every photograph for the sake of one.
 
                 On a notebook the viewport is landscape and the photograph still
                 is not. Covering the width scales it far taller than the screen,
@@ -235,15 +246,22 @@ export default function RoseEnvelope({ invitation, preview = false }) {
                   {displayDate}
                 </motion.p>
 
-                <motion.div
-                  animate={{ y: [0, 8, 0] }}
-                  transition={{ duration: 2, repeat: Infinity }}
-                  className={`mt-24 font-invite-serif text-[9px] uppercase tracking-[0.5em] ${
+                {/*
+                  The shared `decor-float` keyframes rather than framer-motion,
+                  and for one reason: this was the last endlessly-repeating
+                  JavaScript animation on the invitation, and while even one is
+                  mounted framer keeps its own requestAnimationFrame loop
+                  running through every frame of every scroll. On CSS, that loop
+                  goes quiet once the names have finished arriving.
+                */}
+                <div
+                  style={{ "--decor-dy": "8px", "--decor-duration": "2s" }}
+                  className={`decor-float mt-24 font-invite-serif text-[9px] uppercase tracking-[0.5em] ${
                     heroPhoto ? "text-white/75" : "text-[#B18A91]"
                   }`}
                 >
                   Доош гүйлгэнэ үү
-                </motion.div>
+                </div>
               </div>
             </section>
 

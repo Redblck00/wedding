@@ -1,0 +1,8 @@
+# Vercel CLI's project link (project + org ID). Created at the repo root when
+# `vercel link` is run from here, which is where it must be run: the project's
+# Root Directory is `frontend`, so the CLI has to upload from the level above it
+# for a CLI deploy to resolve the same paths a git-push deploy does.
+#
+# frontend/.gitignore already ignores its own `.vercel`; this covers the root
+# one, which nothing else did.
+.vercel

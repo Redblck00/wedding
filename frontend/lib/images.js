@@ -16,9 +16,15 @@
  * screenshot would otherwise take over a whole scroll of the invitation.
  */
 
-/** Taller than 2:3 is cropped top and bottom. A phone portrait is 3:4, so the
- *  common case sits comfortably inside this. */
-const MIN_RATIO = 2 / 3;
+/** Taller than 9:16 is cropped top and bottom.
+ *
+ *  The two shapes a couple actually sends are a phone portrait (3:4) and a
+ *  phone photograph or screenshot (9:16), and at the old 2:3 floor the second
+ *  of those lost 16% of its height before a guest saw it — heads and feet, the
+ *  two ends of a photograph that are worth the most. A gallery card takes its
+ *  height from the viewport and its width from this ratio, so letting the floor
+ *  down costs nothing but a narrower card. */
+const MIN_RATIO = 9 / 16;
 
 /** Wider than 16:9 — panoramas — is cropped at the sides. */
 const MAX_RATIO = 16 / 9;

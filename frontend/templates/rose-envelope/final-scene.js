@@ -22,38 +22,63 @@ import { useScrollProgress } from "./use-scroll-progress";
  */
 export default function FinalScene({ photoUrl, brideName, groomName, displayDate, subtitle }) {
   const ref = useRef(null);
-  const progress = useScrollProgress(ref);
+  const windowRef = useRef(null);
+  const imageRef = useRef(null);
+  const captionRef = useRef(null);
+
+  /*
+   * Three styles written to three elements, and no React render at all.
+   *
+   * Every value here changes on every frame of a two-screen scroll, so as state
+   * this scene re-rendered itself — names, date, the lot — as fast as the guest
+   * could scroll. None of that markup ever changes; only these three
+   * properties do.
+   */
+  useScrollProgress(ref, (progress) => {
+    const clipHeight = 20 + progress * 80;
+    const inset = (100 - clipHeight) / 2;
+    // Wider than tall at the start so the opening reads as a landscape window;
+    // goes negative near the end so the image fully clears the frame.
+    const insetX = (100 - clipHeight * 1.78) / 2;
+
+    if (windowRef.current) {
+      windowRef.current.style.clipPath = `inset(${inset}% ${insetX}% ${inset}% ${insetX}%)`;
+    }
+
+    if (imageRef.current) {
+      imageRef.current.style.transform = `scale(${1.1 - progress * 0.08})`;
+    }
+
+    if (captionRef.current) {
+      captionRef.current.style.opacity = Math.max(0, (progress - 0.5) * 2);
+    }
+  });
 
   if (!photoUrl) return null;
-
-  const clipHeight = 20 + progress * 80;
-  const textOpacity = Math.max(0, (progress - 0.5) * 2);
-  const imageScale = 1.1 - progress * 0.08;
-
-  const inset = (100 - clipHeight) / 2;
-  // Wider than tall at the start so the opening reads as a landscape window;
-  // goes negative near the end so the image fully clears the frame.
-  const insetX = (100 - clipHeight * 1.78) / 2;
 
   return (
     <section ref={ref} className="relative h-[200vh]">
       <div className="sticky top-0 h-screen-safe overflow-hidden bg-[#795861]">
+        {/* The starting frame — what progress 0 looks like, and what the
+            server renders. Everything after it is written by the callback. */}
         <div
+          ref={windowRef}
           className="absolute inset-0"
           style={{
-            clipPath: `inset(${inset}% ${insetX}% ${inset}% ${insetX}%)`,
+            clipPath: "inset(40% 32.2% 40% 32.2%)",
             transition: "clip-path 0.05s linear",
             willChange: "clip-path",
           }}
         >
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
+            ref={imageRef}
             src={photoUrl}
             alt=""
             loading="lazy"
             className="h-full w-full object-cover"
             style={{
-              transform: `scale(${imageScale})`,
+              transform: "scale(1.1)",
               transition: "transform 0.05s linear",
               willChange: "transform",
             }}
@@ -69,8 +94,9 @@ export default function FinalScene({ photoUrl, brideName, groomName, displayDate
         </div>
 
         <div
+          ref={captionRef}
           className="pointer-events-none absolute inset-0 z-[2] flex flex-col items-center justify-end px-6 pb-[min(8rem,18vh)] text-center"
-          style={{ opacity: textOpacity, transition: "opacity 0.1s linear" }}
+          style={{ opacity: 0, transition: "opacity 0.1s linear" }}
         >
           {subtitle ? (
             <p className="mb-5 font-invite-serif text-sm italic tracking-[0.35em] text-white/65">

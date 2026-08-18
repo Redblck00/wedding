@@ -119,6 +119,59 @@ body {
   }
 }
 
+/**
+ * The invitation's decorative layer — flowers, petals, sparkles, doves.
+ *
+ * CSS rather than framer-motion, and the reason is arithmetic. Nine sections
+ * render `IntroductionDecorations` and each copy is twenty-six pieces, so a
+ * guest scrolling the invitation had well over two hundred JavaScript-driven
+ * animations recomputing and writing inline styles every frame — on screen and
+ * off, all of it on the same main thread the finger's scroll is waiting for.
+ * A CSS animation of `transform` and `opacity` is handed to the compositor and
+ * costs that thread nothing once its first style pass is done.
+ *
+ * One keyframe rule for every piece, in the same spirit as the confetti above:
+ * each element's drift, spin, scale and fade arrive as custom properties set
+ * inline, so two hundred of them share these eight lines.
+ *
+ * The defaults are all "stay put", so a piece declares only the axis it moves
+ * on — a petal that drifts and does not fade sets no opacity at all.
+ */
+@keyframes decor-float {
+  0%,
+  100% {
+    opacity: var(--decor-from, 1);
+    transform: translate3d(0, 0, 0) rotate(0deg) scale(var(--decor-from-scale, 1));
+  }
+  50% {
+    opacity: var(--decor-to, 1);
+    transform: translate3d(var(--decor-dx, 0px), var(--decor-dy, 0px), 0)
+      rotate(var(--decor-spin, 0deg)) scale(var(--decor-scale, 1));
+  }
+}
+
+.decor-float {
+  animation: decor-float var(--decor-duration, 6s) ease-in-out var(--decor-delay, 0s) infinite;
+}
+
+/**
+ * The layer those pieces sit on.
+ *
+ * `content-visibility: auto` is what stops the eight copies a guest is *not*
+ * looking at from costing anything: the browser skips rendering — and with it
+ * animating — a subtree it has determined is off screen. Only the section on
+ * screen is doing any work at all.
+ *
+ * Tailwind's `rotate-[…]` utilities compile to the standalone `rotate`
+ * property in v4, which the spec applies before `transform` — so a flower's
+ * hand-placed tilt and this animation's spin compose instead of overwriting
+ * one another.
+ */
+.decor-layer {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 600px;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

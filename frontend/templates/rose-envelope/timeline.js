@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef } from "react";
+import { useRef, useState } from "react";
 
 import IntroductionDecorations from "./introduction-decorations";
 import Reveal from "./reveal";
@@ -62,15 +62,33 @@ function WeddingDayCard({ displayDate, className = "" }) {
  */
 export default function Timeline({ entries, displayDate }) {
   const ref = useRef(null);
-  const progress = useScrollProgress(ref);
+  const sceneRef = useRef(null);
 
-  if (!entries?.length) return null;
+  // How many programme entries have been revealed — the one thing in this scene
+  // that changes in steps rather than continuously, and so the one thing with
+  // any business re-rendering React. The letter's drift and the growing line
+  // both change every frame and are handled below without a render at all.
+  const [shown, setShown] = useState(0);
 
-  const cardY = -progress * 30;
-  const cardRotation = progress * 3;
   // Spread reveals across the scroll so the last entry lands near the end,
   // regardless of how many programme items the couple added.
-  const step = entries.length > 1 ? 0.85 / (entries.length - 1) : 0;
+  const step = entries?.length > 1 ? 0.85 / (entries.length - 1) : 0;
+
+  useScrollProgress(ref, (progress) => {
+    // One custom property, written straight to the scene: the two rules that
+    // need it do their own arithmetic in CSS, so a frame of scrolling costs one
+    // property write rather than a re-render of the whole programme.
+    sceneRef.current?.style.setProperty("--progress", progress);
+
+    const revealed =
+      step > 0 ? Math.min(entries.length, Math.floor(progress / step) + 1) : entries.length;
+
+    // React bails out of an unchanged value, so this re-renders once per entry
+    // over the length of the section instead of once per frame.
+    setShown((current) => (current === revealed ? current : revealed));
+  });
+
+  if (!entries?.length) return null;
 
   return (
     <>
@@ -112,7 +130,7 @@ export default function Timeline({ entries, displayDate }) {
       </section>
 
       <section ref={ref} className="relative h-[200vh]">
-        <div className="sticky top-0 h-screen-safe overflow-hidden bg-[#F9E7EC]">
+        <div ref={sceneRef} className="sticky top-0 h-screen-safe overflow-hidden bg-[#F9E7EC]">
           <IntroductionDecorations />
 
           {/*
@@ -130,8 +148,11 @@ export default function Timeline({ entries, displayDate }) {
           <div className="relative z-20 mx-auto grid h-full max-w-[1200px] grid-cols-1 items-start gap-[clamp(1.5rem,4vw,4rem)] px-[clamp(1.25rem,4vw,4rem)] py-[clamp(2rem,3vw,3rem)] md:grid-cols-2 md:items-center md:gap-[clamp(2rem,6vw,6rem)]">
             <div
               className="hidden items-center justify-center md:flex"
+              // The same drift as before, expressed against `--progress` so the
+              // scroll callback never has to render this branch to move it.
               style={{
-                transform: `translateY(${cardY}px) rotate(${cardRotation}deg)`,
+                transform:
+                  "translateY(calc(var(--progress, 0) * -30px)) rotate(calc(var(--progress, 0) * 3deg))",
                 transition: "transform 0.05s linear",
                 willChange: "transform",
               }}
@@ -157,18 +178,24 @@ export default function Timeline({ entries, displayDate }) {
               </Reveal>
 
               <div className="relative pl-[30px]">
+                {/*
+                  The line grows on `scaleY`, not on `height`. Both look the
+                  same; only one of them asks the browser to lay the section out
+                  again on every frame of the scroll that drives it.
+                */}
                 <div
-                  className="absolute left-0 top-0 w-px"
+                  className="absolute left-0 top-0 h-full w-px origin-top"
                   style={{
-                    height: `${Math.min(100, progress * 280)}%`,
+                    transform: "scaleY(min(1, calc(var(--progress, 0) * 2.8)))",
                     background:
                       "linear-gradient(to bottom, transparent, #A77B83 15%, #A77B83 85%, transparent)",
-                    transition: "height 0.1s linear",
+                    transition: "transform 0.1s linear",
+                    willChange: "transform",
                   }}
                 />
 
                 {entries.map((entry, index) => {
-                  const visible = progress > index * step;
+                  const visible = index < shown;
 
                   return (
                     <div
@@ -182,13 +209,34 @@ export default function Timeline({ entries, displayDate }) {
                     >
                       <div className="absolute -left-[34px] top-1 h-2 w-2 rounded-full bg-[#A77B83] shadow-[0_0_0_4px_rgba(167,123,131,0.12)]" />
 
+                      {/* `text-xs`, not `text-md` — that one is not a Tailwind
+                          size at all (the scale runs xs, sm, base, lg), so it
+                          compiled to nothing and the time was inheriting 16px:
+                          a louder line than the title it labels. */}
                       {entry.startsAt ? (
-                        <p className="mb-1 font-invite-serif text-md tracking-[0.3em] text-[#A77B83]">
+                        <p className="mb-1 font-invite-serif text-xs tracking-[0.3em] text-[#A77B83]">
                           {entry.startsAt}
                         </p>
                       ) : null}
 
-                      <h3 className="mb-0.5 font-invite-display text-[2rem] text-[#694951] md:text-[1.15rem]">
+                      {/*
+                        11px, and the same 11px on every screen — the couple's
+                        own call, made twice.
+
+                        It is a long way from where this started: `text-[2rem]`
+                        on a phone and `md:text-[1.15rem]` above it, which had
+                        the narrowest screen carrying the largest type, and six
+                        32px lines in a panel pinned to the viewport.
+
+                        At this size nothing but the face and the colour marks
+                        the title out as the heading of its entry — the time
+                        above it is letter-spaced 12px and the description below
+                        it is 14px, so the programme reads as three quiet lines
+                        rather than a hierarchy. That is a deliberate look, not
+                        an oversight; `md:text-[1.15rem]` is the one word that
+                        gives the notebook its larger heading back.
+                      */}
+                      <h3 className="mb-0.5 font-invite-display text-[11px] text-[#694951]">
                         {entry.title}
                       </h3>
 

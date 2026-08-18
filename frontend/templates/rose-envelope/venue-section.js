@@ -67,7 +67,11 @@ export default function VenueSection({ title, subtitle, venues }) {
                     // Without `sizes` Next assumes the image fills the viewport
                     // and ships a needlessly large file to every phone.
                     sizes="(max-width: 640px) 82vw, 420px"
-                    className="object-cover transition-transform duration-1000 group-hover:scale-105"
+                    // `md:` on the hover zoom: on a touch screen `:hover`
+                    // latches on tap and stays until something else is tapped,
+                    // so this read as a venue photo that had zoomed in and
+                    // would not zoom back out.
+                    className="object-cover transition-transform duration-1000 md:group-hover:scale-105"
                   />
                 ) : (
                   <div

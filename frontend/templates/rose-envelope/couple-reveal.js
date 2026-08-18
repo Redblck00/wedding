@@ -2,7 +2,6 @@
 
 import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
-import { motion } from "framer-motion";
 
 import { frameRatio } from "@/lib/images";
 import IntroductionDecorations from "./introduction-decorations";
@@ -20,88 +19,135 @@ const CAPTIONS = [
 
 /**
  * Soft doves, pink flowers and petals behind the horizontal gallery track.
- * Purely ornamental — `pointer-events-none`, hidden from assistive tech.
+ *
+ * Purely ornamental — `pointer-events-none`, hidden from assistive tech — and
+ * animated by the shared `decor-float` keyframes in `globals.css` rather than
+ * by framer-motion, for the reason set out in `introduction-decorations.js`:
+ * this is the one panel a guest drags sideways with a finger, and eleven
+ * JavaScript animations recalculating on the same thread that has to answer
+ * that finger is eleven too many.
+ *
+ * `hidden md:block` on most of them. The narrow screen shows a third of the
+ * width these were placed across, so on a phone they were landing on top of
+ * each other anyway; the doves and one flower carry the panel there.
  */
 function GalleryDecorations() {
   return (
-    <div aria-hidden className="pointer-events-none absolute inset-0 z-0 overflow-hidden">
-      <motion.div
-        animate={{ y: [0, -14, 0], x: [0, 8, 0] }}
-        transition={{ duration: 9, repeat: Infinity, ease: "easeInOut" }}
-        className="absolute left-[6%] top-[18%] text-[#C99DA6]/45"
+    <div aria-hidden className="decor-layer pointer-events-none absolute inset-0 z-0 overflow-hidden">
+      <div
+        className="decor-float absolute left-[6%] top-[18%] text-[#C99DA6]/45"
+        style={{ "--decor-dx": "8px", "--decor-dy": "-14px", "--decor-duration": "9s" }}
       >
         <Dove className="h-14 w-14 rotate-[-12deg] md:h-20 md:w-20" />
-      </motion.div>
+      </div>
 
-      <motion.div
-        animate={{ y: [0, 12, 0], x: [0, -10, 0] }}
-        transition={{ duration: 11, repeat: Infinity, ease: "easeInOut", delay: 1.2 }}
-        className="absolute right-[8%] top-[22%] text-[#D3AAB3]/40"
+      <div
+        className="decor-float absolute right-[8%] top-[22%] text-[#D3AAB3]/40"
+        style={{
+          "--decor-dx": "-10px",
+          "--decor-dy": "12px",
+          "--decor-duration": "11s",
+          "--decor-delay": "1.2s",
+        }}
       >
         <Dove className="h-12 w-12 scale-x-[-1] rotate-[8deg] md:h-16 md:w-16" />
-      </motion.div>
+      </div>
 
-      <motion.div
-        animate={{ y: [0, -10, 0], rotate: [-6, 6, -6] }}
-        transition={{ duration: 7, repeat: Infinity, ease: "easeInOut" }}
-        className="absolute bottom-[16%] left-[12%] text-5xl text-[#C99DA6]/35 md:text-6xl"
+      <div
+        className="decor-float absolute bottom-[16%] left-[12%] text-5xl text-[#C99DA6]/35 md:text-6xl"
+        style={{ "--decor-dy": "-10px", "--decor-spin": "8deg", "--decor-duration": "7s" }}
       >
         ✿
-      </motion.div>
+      </div>
 
-      <motion.div
-        animate={{ y: [0, 10, 0], rotate: [8, -4, 8] }}
-        transition={{ duration: 8, repeat: Infinity, ease: "easeInOut", delay: 0.6 }}
-        className="absolute right-[14%] bottom-[20%] text-4xl text-[#D9B8B8]/40 md:text-5xl"
+      <div
+        className="decor-float absolute right-[14%] bottom-[20%] hidden text-4xl text-[#D9B8B8]/40 md:block md:text-5xl"
+        style={{
+          "--decor-dy": "10px",
+          "--decor-spin": "-9deg",
+          "--decor-duration": "8s",
+          "--decor-delay": "0.6s",
+        }}
       >
         ❀
-      </motion.div>
+      </div>
 
-      <motion.div
-        animate={{ opacity: [0.2, 0.55, 0.2], scale: [0.9, 1.05, 0.9] }}
-        transition={{ duration: 5.5, repeat: Infinity, ease: "easeInOut" }}
-        className="absolute left-[28%] top-[12%] text-3xl text-[#C89EA8]/40"
+      <div
+        className="decor-float absolute left-[28%] top-[12%] hidden text-3xl text-[#C89EA8]/40 md:block"
+        style={{
+          "--decor-from": 0.2,
+          "--decor-to": 0.55,
+          "--decor-from-scale": 0.9,
+          "--decor-scale": 1.05,
+          "--decor-duration": "5.5s",
+        }}
       >
         ❁
-      </motion.div>
+      </div>
 
-      <motion.div
-        animate={{ opacity: [0.15, 0.5, 0.15], y: [0, -8, 0] }}
-        transition={{ duration: 6, repeat: Infinity, ease: "easeInOut", delay: 0.8 }}
-        className="absolute right-[30%] top-[14%] text-2xl text-[#D3AAB3]/45"
+      <div
+        className="decor-float absolute right-[30%] top-[14%] hidden text-2xl text-[#D3AAB3]/45 md:block"
+        style={{
+          "--decor-from": 0.15,
+          "--decor-to": 0.5,
+          "--decor-dy": "-8px",
+          "--decor-duration": "6s",
+          "--decor-delay": "0.8s",
+        }}
       >
         ✾
-      </motion.div>
+      </div>
 
-      <motion.div
-        animate={{ y: [0, -16, 0], x: [0, 6, 0], rotate: [0, 20, 0] }}
-        transition={{ duration: 6.5, repeat: Infinity, ease: "easeInOut" }}
-        className="absolute left-[40%] bottom-[12%] h-3.5 w-6 rounded-full border border-[#C99DA6]/35 bg-[#F5DDE3]/45"
+      <div
+        className="decor-float absolute left-[40%] bottom-[12%] hidden h-3.5 w-6 rounded-full border border-[#C99DA6]/35 bg-[#F5DDE3]/45 md:block"
+        style={{
+          "--decor-dx": "6px",
+          "--decor-dy": "-16px",
+          "--decor-spin": "20deg",
+          "--decor-duration": "6.5s",
+        }}
       />
 
-      <motion.div
-        animate={{ y: [0, 14, 0], x: [0, -5, 0], rotate: [0, -18, 0] }}
-        transition={{ duration: 7.5, repeat: Infinity, ease: "easeInOut", delay: 1 }}
-        className="absolute right-[38%] bottom-[14%] h-3 w-5 rounded-full border border-[#C99DA6]/30 bg-[#F5DDE3]/40"
+      <div
+        className="decor-float absolute right-[38%] bottom-[14%] hidden h-3 w-5 rounded-full border border-[#C99DA6]/30 bg-[#F5DDE3]/40 md:block"
+        style={{
+          "--decor-dx": "-5px",
+          "--decor-dy": "14px",
+          "--decor-spin": "-18deg",
+          "--decor-duration": "7.5s",
+          "--decor-delay": "1s",
+        }}
       />
 
-      <motion.div
-        animate={{ opacity: [0.15, 0.7, 0.15], scale: [0.7, 1.15, 0.7] }}
-        transition={{ duration: 3.2, repeat: Infinity }}
-        className="absolute left-[18%] top-[42%] text-lg text-[#D3AAB3]/50"
+      <div
+        className="decor-float absolute left-[18%] top-[42%] text-lg text-[#D3AAB3]/50"
+        style={{
+          "--decor-from": 0.15,
+          "--decor-to": 0.7,
+          "--decor-from-scale": 0.7,
+          "--decor-scale": 1.15,
+          "--decor-duration": "3.2s",
+        }}
       >
         ✦
-      </motion.div>
+      </div>
 
-      <motion.div
-        animate={{ opacity: [0.1, 0.65, 0.1], scale: [0.8, 1.2, 0.8] }}
-        transition={{ duration: 2.8, repeat: Infinity, delay: 0.5 }}
-        className="absolute right-[20%] top-[48%] text-sm text-[#D3AAB3]/45"
+      <div
+        className="decor-float absolute right-[20%] top-[48%] hidden text-sm text-[#D3AAB3]/45 md:block"
+        style={{
+          "--decor-from": 0.1,
+          "--decor-to": 0.65,
+          "--decor-from-scale": 0.8,
+          "--decor-scale": 1.2,
+          "--decor-duration": "2.8s",
+          "--decor-delay": "0.5s",
+        }}
       >
         ✦
-      </motion.div>
+      </div>
 
-      {/* Soft pink washes so the track sits on atmosphere, not a flat panel. */}
+      {/* Soft pink washes so the track sits on atmosphere, not a flat panel.
+          Static, so the blur is rasterised once and never again. */}
       <div className="absolute -left-24 top-1/4 h-72 w-72 rounded-full bg-[#F2DDE3]/50 blur-3xl" />
       <div className="absolute -right-20 bottom-1/4 h-80 w-80 rounded-full bg-[#F9E7EC]/70 blur-3xl" />
     </div>
@@ -153,25 +199,35 @@ function cardHeightScale(photo, index) {
 }
 
 /**
- * How strongly the depth effects read, per screen size.
+ * How strongly the depth effects read — blur, shrink, fade, parallax.
  *
- * `blur` is the one that differs in kind rather than degree: a blur filter is
- * re-rasterised every frame for every card it is on, and on a phone that is the
- * one thing in this scene that can drop the scroll below 60fps. Depth on a
- * 390px screen is carried by scale and parallax alone, which are transforms the
- * compositor already handles.
+ * One table, because there are now only two answers: this on a notebook, and
+ * nothing at all on a phone.
+ *
+ * Each of the four costs something a phone cannot spare. `blur` re-rasterises
+ * every card it is on, every frame. `zoom` is headroom for the parallax and is
+ * paid for in photograph — at 1.08 a phone showed 92% of every picture, 4%
+ * trimmed off each edge, which on a screen where one card is nearly the full
+ * width is the difference between a family in frame and a child cut off at the
+ * shoulder. And `shrink` and `fade` cost the most of all, though nothing about
+ * them looks expensive: they change with the scroll, so keeping them means
+ * React re-rendering all six cards on every frame of it.
+ *
+ * With them off, a phone's gallery is one `transform` written to one element
+ * per frame and no re-render at all. The panel keeps its idea — photographs
+ * travelling sideways as the page goes down — and loses the ornament on top of
+ * it, which is the right way round when the alternative is a scroll that
+ * stutters under the finger pushing it.
  *
  * `drift` is a *share of each card's width*, not a pixel count. A fixed 28px
  * shift is a sixth of a narrow portrait card and a twentieth of a wide one, and
  * on the narrow one it would slide the photograph clean past the zoom that is
  * meant to be hiding its edge.
  */
-const DEPTH = {
-  wide: { blur: 3.2, shrink: 0.07, fade: 0.55, drift: 0.06, zoom: 1.14 },
-  compact: { blur: 0, shrink: 0.05, fade: 0.45, drift: 0.03, zoom: 1.08 },
-};
+const DEPTH = { blur: 3.2, shrink: 0.07, fade: 0.55, drift: 0.06, zoom: 1.14 };
 
-/** No effect at all — reduced motion, and the state before measurement. */
+/** No effect at all — a phone, reduced motion, and the state before
+ *  measurement. */
 const DEPTH_OFF = { blur: 0, shrink: 0, fade: 0, drift: 0, zoom: 1 };
 
 /**
@@ -183,13 +239,31 @@ const DEPTH_OFF = { blur: 0, shrink: 0, fade: 0, drift: 0, zoom: 1 };
 function HorizontalGallery({ photos }) {
   const sectionRef = useRef(null);
   const trackRef = useRef(null);
-  const progress = useScrollProgress(sectionRef);
 
   // Geometry, not just the travel distance: the depth effects need to know where
   // each card sits along the track, and measuring one card per frame in render
   // would force a layout on every scroll tick.
   const [track, setTrack] = useState({ maxX: 0, viewport: 0, cards: [] });
   const [screen, setScreen] = useState({ compact: false, reduced: false });
+
+  // How far through the section the page has scrolled. Only read by the depth
+  // effects, so only maintained when they are running — see the callback below.
+  const [progress, setProgress] = useState(0);
+
+  /*
+   * Three refs for three things the scroll callback needs and React state
+   * cannot give it: that callback runs between renders, so it can only see what
+   * has been written somewhere it can reach.
+   *
+   * `geometry` mirrors the `track` state. `travelled` is the last progress
+   * reported, kept so a resize can re-apply the transform at the new width
+   * without waiting for the guest to scroll again. `depthOn` is whether
+   * anything in the render still depends on the scroll — when it does not, the
+   * callback writes its one transform and returns without touching React.
+   */
+  const geometry = useRef({ maxX: 0, viewport: 0, cards: [] });
+  const travelled = useRef(0);
+  const depthOn = useRef(false);
 
   // The card under the cursor or the finger, which is shown unblurred whatever
   // the depth maths says. Pointer events rather than `:hover`, for two reasons:
@@ -203,7 +277,7 @@ function HorizontalGallery({ photos }) {
     if (!element) return;
 
     const measure = () => {
-      setTrack({
+      const next = {
         maxX: Math.max(0, element.scrollWidth - window.innerWidth),
         viewport: window.innerWidth,
         cards: Array.from(element.children, (card) => ({
@@ -213,7 +287,15 @@ function HorizontalGallery({ photos }) {
           centre: card.offsetLeft + card.offsetWidth / 2,
           width: card.offsetWidth,
         })),
-      });
+      };
+
+      geometry.current = next;
+      setTrack(next);
+
+      // A rotated phone has a new `maxX` and the old transform still on screen.
+      // Nothing corrects that until the guest scrolls, so it is re-applied here
+      // from the last progress reported.
+      element.style.transform = `translate3d(-${travelled.current * next.maxX}px, 0, 0)`;
     };
 
     measure();
@@ -244,7 +326,12 @@ function HorizontalGallery({ photos }) {
   useEffect(() => {
     const narrow = window.matchMedia("(max-width: 768px)");
     const still = window.matchMedia("(prefers-reduced-motion: reduce)");
-    const sync = () => setScreen({ compact: narrow.matches, reduced: still.matches });
+    const sync = () => {
+      const next = { compact: narrow.matches, reduced: still.matches };
+      // Read by the scroll callback, which cannot wait for a commit.
+      depthOn.current = !next.compact && !next.reduced;
+      setScreen(next);
+    };
 
     sync();
     narrow.addEventListener("change", sync);
@@ -256,8 +343,53 @@ function HorizontalGallery({ photos }) {
     };
   }, []);
 
-  const depth = screen.reduced ? DEPTH_OFF : screen.compact ? DEPTH.compact : DEPTH.wide;
-  const travelled = progress * track.maxX;
+  /*
+   * The one job that has to happen on every frame: slide the track.
+   *
+   * Written straight to the element rather than rendered, so a scroll costs one
+   * style write instead of a React render of the whole gallery. `transform` is
+   * deliberately absent from the JSX below — React only touches the style
+   * properties it is handed, so leaving it out is what stops a re-render from
+   * snapping the track back to wherever the last commit thought it was.
+   */
+  useScrollProgress(sectionRef, (value) => {
+    travelled.current = value;
+
+    const element = trackRef.current;
+    if (element) {
+      element.style.transform = `translate3d(-${value * geometry.current.maxX}px, 0, 0)`;
+    }
+
+    if (!depthOn.current) return;
+
+    /*
+     * Quantised to four hundred steps, and only on the screens that use it.
+     *
+     * The depth effects are a blur, a 7% scale and a fade, and a four-hundredth
+     * of the track's length is well under the point where any of the three
+     * changes by something a guest could see. A long gallery is several
+     * thousand frames, so this is four hundred renders against all of them.
+     * `setState` with an unchanged value is free — React bails out before
+     * re-rendering — which is what makes the comparison worth making here.
+     */
+    const stepped = Math.round(value * 400) / 400;
+    setProgress((current) => (current === stepped ? current : stepped));
+  });
+
+  const depth = screen.reduced || screen.compact ? DEPTH_OFF : DEPTH;
+
+  /*
+   * Whether there is a blur for a pointer to clear — and so whether the pointer
+   * handlers below are worth having at all.
+   *
+   * They are not free on a phone. A finger dragging the page sideways crosses
+   * card after card, and every crossing fired `pointerenter`, which set state,
+   * which re-rendered the gallery in the middle of the gesture it was reacting
+   * to. With no blur to clear, all of that bought a `blur(0px)` replacing
+   * nothing.
+   */
+  const clearable = depth.blur > 0;
+  const scrolled = progress * track.maxX;
 
   // Enough travel that the last card can reach the centre; floor keeps short
   // galleries from feeling over in one flick.
@@ -285,10 +417,12 @@ function HorizontalGallery({ photos }) {
         <div
           ref={trackRef}
           className="absolute top-0 left-0 z-10 flex h-full items-center gap-[clamp(1.25rem,3vw,2.5rem)] will-change-transform"
+          // No `transform` here on purpose — it is written to this element by
+          // the scroll callback above, and listing it would hand React a value
+          // to reset it to on the next render.
           style={{
             paddingLeft: "clamp(1.5rem, 10vw, 10rem)",
             paddingRight: "clamp(1.5rem, 6vw, 6rem)",
-            transform: `translate3d(-${travelled}px, 0, 0)`,
           }}
         >
           {photos.map((photo, index) => {
@@ -304,7 +438,7 @@ function HorizontalGallery({ photos }) {
             // nothing to disagree about.
             const offset =
               card && track.viewport
-                ? (card.centre - travelled - track.viewport / 2) / track.viewport
+                ? (card.centre - scrolled - track.viewport / 2) / track.viewport
                 : 0;
 
             // Saturates at ±0.45 of the screen, so a card is fully "away" by the
@@ -326,19 +460,23 @@ function HorizontalGallery({ photos }) {
               <div key={photo.id ?? index} className="flex shrink-0 flex-col gap-3">
                 <div
                   className="group relative overflow-hidden bg-[#F2DDE3]"
-                  onPointerEnter={() => setTouched(index)}
+                  onPointerEnter={clearable ? () => setTouched(index) : undefined}
                   // Guarded rather than a bare `setTouched(null)`: moving from
                   // one card to the next fires enter and leave in an order the
                   // spec does not fix, and an unguarded leave would wipe the
                   // entry the new card had just made.
-                  onPointerLeave={() =>
-                    setTouched((current) => (current === index ? null : current))
+                  onPointerLeave={
+                    clearable
+                      ? () => setTouched((current) => (current === index ? null : current))
+                      : undefined
                   }
                   // A touch that turns into a scroll is cancelled, not left —
                   // without this the card a guest brushed on the way past would
                   // stay clear for the rest of the session.
-                  onPointerCancel={() =>
-                    setTouched((current) => (current === index ? null : current))
+                  onPointerCancel={
+                    clearable
+                      ? () => setTouched((current) => (current === index ? null : current))
+                      : undefined
                   }
                   style={{
                     // Height is the driven axis and width comes from the ratio,
@@ -401,7 +539,12 @@ function HorizontalGallery({ photos }) {
                       alt=""
                       fill
                       preload={index === 0}
-                      className="object-cover transition-transform duration-700 ease-out group-hover:scale-105"
+                      // `md:` on the hover zoom, not because a phone cannot
+                      // hover but because it never stops: a tap leaves `:hover`
+                      // set on the card until something else is tapped, so on a
+                      // phone this was a permanent 5% crop applied to whichever
+                      // photograph a guest had touched last.
+                      className="object-cover transition-transform duration-700 ease-out md:group-hover:scale-105"
                       // Cards run to 94vw on a phone and about 590px on a
                       // desktop. The old `70vw` under-asked for every landscape
                       // card, and Next served a file too small for the frame.

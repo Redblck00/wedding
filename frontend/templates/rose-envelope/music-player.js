@@ -75,7 +75,12 @@ export default function MusicPlayer({ videoId, loop, autoplay = false, startSeco
         onClick={() => setPlaying((value) => !value)}
         aria-pressed={playing}
         aria-label={playing ? "Хөгжим унтраах" : "Хөгжим тоглуулах"}
-        className="relative flex h-12 w-12 items-center justify-center rounded-full border border-[#CFAAB2] bg-white/80 text-[#795861] shadow-lg backdrop-blur transition hover:bg-white"
+        // Opaque rather than `bg-white/80 backdrop-blur`. A backdrop filter has
+        // to re-sample whatever is behind the element every time that changes,
+        // and this one is `fixed` over the entire invitation — so on a phone it
+        // was re-blurring a moving page on every frame of every scroll, for a
+        // frosting effect on a 48px button nobody is looking at while scrolling.
+        className="relative flex h-12 w-12 items-center justify-center rounded-full border border-[#CFAAB2] bg-white/95 text-[#795861] shadow-lg transition hover:bg-white"
       >
         {playing ? <PauseIcon /> : <NoteIcon />}
       </button>
