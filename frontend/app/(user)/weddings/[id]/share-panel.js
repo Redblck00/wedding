@@ -9,6 +9,25 @@ const clientOrigin = () => window.location.origin;
 const serverOrigin = () => null;
 
 /**
+ * The address the invitation is handed out at, when the deployment has been
+ * told what it is.
+ *
+ * The couple's browser is not a reliable source for this. Vercel serves the
+ * same project at several hostnames — the project's own `*.vercel.app`, a
+ * `*-git-<branch>-*` per branch, and a `*-<hash>-*` per deployment — and a link
+ * copied off one of the last two carries two faults a guest sees before the
+ * invitation: those hostnames sit behind Vercel Authentication, so the guest is
+ * asked to sign in to Vercel, and they are replaced on the next deploy, so the
+ * link stops working. Neither is visible to the couple, whose own session
+ * opens all of them.
+ *
+ * Inlined at build time, so the link is right in the server-rendered HTML too.
+ * Unset, this falls back to the browser's own origin — which is what makes
+ * `localhost:3000` work without configuring anything.
+ */
+const CANONICAL_ORIGIN = process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/+$/, "") || null;
+
+/**
  * Everything the couple needs to actually hand the invitation out: the link,
  * the QR for a printed card, and a way to look at it themselves.
  *
@@ -22,9 +41,15 @@ export default function SharePanel({ weddingId, slug }) {
   // guessing the origin would put a different URL in the HTML than in the
   // browser and trip hydration. Writing it from an effect does the same job but
   // cascades a second render on every mount.
-  const origin = useSyncExternalStore(noSubscribe, clientOrigin, serverOrigin);
+  const browserOrigin = useSyncExternalStore(noSubscribe, clientOrigin, serverOrigin);
 
+  const origin = CANONICAL_ORIGIN ?? browserOrigin;
   const url = origin ? `${origin}/wedding/${slug}` : `/wedding/${slug}`;
+
+  // Worth saying out loud when the two differ: the couple is reading a link
+  // that is not the address in their own bar, and without a word here that
+  // looks like a bug rather than the fix for one.
+  const elsewhere = Boolean(CANONICAL_ORIGIN && browserOrigin && browserOrigin !== CANONICAL_ORIGIN);
 
   async function copy() {
     try {
@@ -44,6 +69,13 @@ export default function SharePanel({ weddingId, slug }) {
       <h2 className="font-display text-xl">Урилгаа тараах</h2>
 
       <p className="mt-3 break-all rounded-xl bg-shell px-3 py-2 text-xs text-ink">{url}</p>
+
+      {elsewhere ? (
+        <p className="mt-2 text-xs leading-relaxed text-muted">
+          Та энэ хуудсыг түр (preview) хаягаар нээсэн байна. Зочдод өгөх линк нь дээрх үндсэн
+          хаягаар үүссэн — түр хаягийг хуваалцвал зочид Vercel-д нэвтрэхийг шаардана.
+        </p>
+      ) : null}
 
       <div className="mt-3 flex gap-2">
         <button

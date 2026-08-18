@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 
-import { frameRatio } from "@/lib/images";
+import { naturalRatio } from "@/lib/images";
 import IntroductionDecorations from "./introduction-decorations";
 import Reveal from "./reveal";
 import { useScrollProgress } from "./use-scroll-progress";
@@ -190,8 +190,7 @@ const CARD_SHAPE = { landscape: 0.82, square: 0.94, portrait: 1.1 };
  */
 const CARD_NUDGE = [1, 0.93, 1.06, 0.97, 1.04, 0.91];
 
-function cardHeightScale(photo, index) {
-  const ratio = frameRatio(photo);
+function cardHeightScale(ratio, index) {
   const shape =
     ratio > 1.2 ? CARD_SHAPE.landscape : ratio > 0.95 ? CARD_SHAPE.square : CARD_SHAPE.portrait;
 
@@ -199,10 +198,19 @@ function cardHeightScale(photo, index) {
 }
 
 /**
- * How strongly the depth effects read — blur, shrink, fade, parallax.
+ * How strongly the depth effects read — blur, shrink and fade.
  *
- * One table, because there are now only two answers: this on a notebook, and
- * nothing at all on a phone.
+ * `drift` and `zoom` are both zero now and kept only so the arithmetic below
+ * reads the same on every screen. They were the parallax: the picture slid
+ * inside its frame, and `zoom` was the 14% it had to be scaled up by first so
+ * the slide never exposed an edge. That 14% is 7% off each side of every
+ * photograph, permanently, and a parallax cannot be had any other way — it is
+ * movement *within* a frame, so something has to be outside the frame to move
+ * into. A gallery whose job is to show the couple's pictures as they took them
+ * cannot pay that, so the effect goes.
+ *
+ * One table for the rest, because there are only two answers: this on a
+ * notebook, and nothing at all on a phone.
  *
  * Each of the four costs something a phone cannot spare. `blur` re-rasterises
  * every card it is on, every frame. `zoom` is headroom for the parallax and is
@@ -224,7 +232,7 @@ function cardHeightScale(photo, index) {
  * on the narrow one it would slide the photograph clean past the zoom that is
  * meant to be hiding its edge.
  */
-const DEPTH = { blur: 3.2, shrink: 0.07, fade: 0.55, drift: 0.06, zoom: 1.14 };
+const DEPTH = { blur: 3.2, shrink: 0.07, fade: 0.55, drift: 0, zoom: 1 };
 
 /** No effect at all — a phone, reduced motion, and the state before
  *  measurement. */
@@ -264,6 +272,19 @@ function HorizontalGallery({ photos }) {
   const geometry = useRef({ maxX: 0, viewport: 0, cards: [] });
   const travelled = useRef(0);
   const depthOn = useRef(false);
+
+  /*
+   * The ratio of each photograph as the browser actually decoded it, by key.
+   *
+   * `media_assets` records a width and a height at upload, and the frame is
+   * built from them — but they are a claim about the file, not a reading of it,
+   * and a claim that is wrong puts a portrait picture in a landscape frame.
+   * `naturalWidth` on the loaded image is not a claim, so it wins as soon as it
+   * exists. Empty on the server and on the first paint, which is what keeps the
+   * stored numbers useful: they are what the layout is built from until the
+   * pictures themselves can correct it.
+   */
+  const [measured, setMeasured] = useState({});
 
   // The card under the cursor or the finger, which is shown unblurred whatever
   // the depth maths says. Pointer events rather than `:hover`, for two reasons:
@@ -426,7 +447,8 @@ function HorizontalGallery({ photos }) {
           }}
         >
           {photos.map((photo, index) => {
-            const ratio = frameRatio(photo);
+            const key = photo.id ?? index;
+            const ratio = measured[key] ?? naturalRatio(photo);
             const label = String(index + 1).padStart(2, "0");
             const caption = CAPTIONS[index % CAPTIONS.length];
 
@@ -457,7 +479,7 @@ function HorizontalGallery({ photos }) {
             const blur = focused ? 0 : away * depth.blur;
 
             return (
-              <div key={photo.id ?? index} className="flex shrink-0 flex-col gap-3">
+              <div key={key} className="flex shrink-0 flex-col gap-3">
                 <div
                   className="group relative overflow-hidden bg-[#F2DDE3]"
                   onPointerEnter={clearable ? () => setTouched(index) : undefined}
@@ -489,6 +511,12 @@ function HorizontalGallery({ photos }) {
                     // *height* keeps the ratio honest — capping the width with
                     // `max-width` would leave the height behind and crop it.
                     //
+                    // The ratio in both halves is the photograph's own, taken
+                    // from the file once it has loaded. Nothing rounds it into
+                    // a bucket and nothing clamps it, so a card is the shape of
+                    // the picture in it — a tall one stands tall, a wide one
+                    // lies wide, and a panorama is simply a long thin card.
+                    //
                     // 94vw, not a safer 80: the cap only ever binds on a wide
                     // photo, and every percent taken off the width comes off the
                     // height twice as fast. At 86vw a landscape card stood 224px
@@ -496,7 +524,7 @@ function HorizontalGallery({ photos }) {
                     // one of them looking like a mistake. At 94vw a wide photo
                     // takes the screen almost edge to edge — one picture at a
                     // time, which is the right unit on a phone anyway.
-                    height: `min(calc(clamp(240px, 50vh, 460px) * ${cardHeightScale(photo, index)}), calc(94vw / ${ratio}))`,
+                    height: `min(calc(clamp(240px, 50vh, 460px) * ${cardHeightScale(ratio, index)}), calc(94vw / ${ratio}))`,
                     aspectRatio: ratio,
                     transform: `scale(${1 - away * depth.shrink})`,
                     transition: "transform 0.25s ease-out",
@@ -539,12 +567,36 @@ function HorizontalGallery({ photos }) {
                       alt=""
                       fill
                       preload={index === 0}
+                      // What the file says it is, once there is a file to ask.
+                      // A frame built from a wrong stored width would otherwise
+                      // stay wrong for the whole visit.
+                      onLoad={(event) => {
+                        const { naturalWidth, naturalHeight } = event.currentTarget;
+                        if (!naturalWidth || !naturalHeight) return;
+
+                        const actual = naturalWidth / naturalHeight;
+                        setMeasured((current) =>
+                          // Guarded: `onLoad` fires again for every new source
+                          // Next serves as the screen resizes, and an unguarded
+                          // write would be a render on each of them.
+                          Math.abs((current[key] ?? 0) - actual) < 0.001
+                            ? current
+                            : { ...current, [key]: actual },
+                        );
+                      }}
                       // `md:` on the hover zoom, not because a phone cannot
                       // hover but because it never stops: a tap leaves `:hover`
                       // set on the card until something else is tapped, so on a
                       // phone this was a permanent 5% crop applied to whichever
                       // photograph a guest had touched last.
-                      className="object-cover transition-transform duration-700 ease-out md:group-hover:scale-105"
+                      // `contain`, not `cover`. With the frame already the
+                      // shape of the photograph the two draw the same pixels —
+                      // but they fail differently, and that is the point: if a
+                      // ratio is ever wrong again, `cover` answers by cutting
+                      // the picture and `contain` answers by leaving a little
+                      // of the card's own pink showing. One of those is a
+                      // photograph with someone missing from it.
+                      className="object-contain transition-transform duration-700 ease-out md:group-hover:scale-105"
                       // Cards run to 94vw on a phone and about 590px on a
                       // desktop. The old `70vw` under-asked for every landscape
                       // card, and Next served a file too small for the frame.

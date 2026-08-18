@@ -77,11 +77,26 @@ export async function compressImage(file) {
       // now or it is lost — and every portrait photo from a phone would arrive
       // sideways with nothing left to say it was.
       imageOrientation: "from-image",
-      // A decode hint. Where it is honoured the full-size bitmap never exists,
-      // which is what keeps a 45MP photo from taking ~180MB in a phone's tab;
-      // where it is ignored the draw below still produces the same result.
-      resizeWidth: MAX_DIMENSION,
-      resizeHeight: MAX_DIMENSION,
+      /*
+       * No `resizeWidth` / `resizeHeight` here, and this is the whole of the
+       * bug they were.
+       *
+       * They were written as a decode hint — a way to keep a 45MP photo from
+       * ever existing at full size in a phone's tab. That is not what they do.
+       * `createImageBitmap` treats the pair as the *exact* output size, and
+       * preserves the aspect ratio only when one of the two is left out. Both
+       * set to 2400 meant every photograph that went through here came out
+       * 2400x2400: a 3:2 picture squeezed narrow, a portrait stretched wide,
+       * and the couple's own faces with it. The file uploaded was that squashed
+       * copy, and the width and height recorded for it were 2400 and 2400 — so
+       * the gallery then built a square frame, and everything agreed with
+       * everything except the photograph.
+       *
+       * The size is handled below instead, where `targetSize` works out both
+       * axes from the picture's own shape and the canvas draws to them. That is
+       * one full-size bitmap for the length of the draw, which is the cost of
+       * getting the shape right and worth paying.
+       */
       resizeQuality: "high",
     });
   } catch {

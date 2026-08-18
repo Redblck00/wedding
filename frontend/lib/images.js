@@ -59,3 +59,23 @@ export function frameRatio(photo, { min = MIN_RATIO, max = MAX_RATIO } = {}) {
 export function isLandscape(photo) {
   return frameRatio(photo) > LANDSCAPE_RATIO;
 }
+
+/**
+ * The photograph's own ratio, with nothing clamped off it.
+ *
+ * `frameRatio` answers a different question — "what shape should a frame be to
+ * hold this without giving a panorama the whole screen" — and its clamp is the
+ * price of that: a picture outside the range gets a frame of a different shape
+ * than itself, and `cover` then trims the difference off. That trade is fine
+ * for a frame that has other work to do, and wrong for a gallery whose one job
+ * is to show the couple's photographs as they took them.
+ *
+ * The fallback is still 3:2, and still only reaches a photo whose dimensions
+ * were never recorded. A gallery that cares about the answer should correct it
+ * from the loaded image, which is what `couple-reveal` does — `naturalWidth`
+ * is the truth and the database is only a first guess at it.
+ */
+export function naturalRatio(photo) {
+  if (!photo?.width || !photo?.height) return FALLBACK_RATIO;
+  return photo.width / photo.height;
+}
