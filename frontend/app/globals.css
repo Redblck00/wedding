@@ -172,6 +172,43 @@ body {
   contain-intrinsic-size: auto 600px;
 }
 
+/**
+ * The programme's two scroll-driven pieces — the entries arriving one by one
+ * and the line growing beside them — which only run where a scroll drives them.
+ *
+ * Below `md` the schedule is a plain section: no sticky panel and no 200vh of
+ * travel, because a three-entry programme pinned to the viewport is a short
+ * list and half a screen of nothing under it, and that nothing reads as a gap
+ * between two sections. With no tall section there is no progress either —
+ * `useScrollProgress` reports 0 for anything shorter than the viewport — so
+ * both rules have to stand on their own here: every entry visible, and the line
+ * at full height.
+ *
+ * Written as a stylesheet rule rather than inline because a media query cannot
+ * be an inline style, and the values these override *are* inline: they are
+ * custom properties the scroll writes, and a custom property is inert until
+ * something reads it.
+ */
+.programme-entry {
+  opacity: 1;
+  transform: none;
+}
+
+.programme-line {
+  transform: scaleY(1);
+}
+
+@media (min-width: 768px) {
+  .programme-entry {
+    opacity: var(--entry-opacity, 1);
+    transform: translateY(var(--entry-shift, 0px));
+  }
+
+  .programme-line {
+    transform: scaleY(min(1, calc(var(--progress, 0) * 2.8)));
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

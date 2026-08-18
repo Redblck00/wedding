@@ -129,8 +129,28 @@ export default function Timeline({ entries, displayDate }) {
         </div>
       </section>
 
-      <section ref={ref} className="relative h-[200vh]">
-        <div ref={sceneRef} className="sticky top-0 h-screen-safe overflow-hidden bg-[#F9E7EC]">
+      {/*
+        The scroll-driven scene is a notebook thing now.
+
+        On a phone this was a `200vh` section holding a panel pinned at
+        `100svh`, and the panel held the programme alone — the letter has its
+        own section above. A schedule of three entries is about half of that
+        height, so the other half was empty pink sitting between the last entry
+        and whatever section came next, which is not space, it is a gap. A
+        couple with six entries never saw it and a couple with three saw
+        nothing else.
+
+        So below `md` the section is simply as tall as the programme in it. The
+        two rules that read the scroll — the entries arriving one by one and the
+        line growing — are handled for that case in `globals.css`, because a
+        media query cannot be written as an inline style and inline is what the
+        scroll-driven version has to be.
+      */}
+      <section ref={ref} className="relative md:h-[200vh]">
+        <div
+          ref={sceneRef}
+          className="relative overflow-hidden bg-[#F9E7EC] md:sticky md:top-0 md:h-screen-safe"
+        >
           <IntroductionDecorations />
 
           {/*
@@ -145,7 +165,7 @@ export default function Timeline({ entries, displayDate }) {
             Centring is still right on desktop, where this is a two-column scene
             and the letter has to line up beside the list.
           */}
-          <div className="relative z-20 mx-auto grid h-full max-w-[1200px] grid-cols-1 items-start gap-[clamp(1.5rem,4vw,4rem)] px-[clamp(1.25rem,4vw,4rem)] py-[clamp(2rem,3vw,3rem)] md:grid-cols-2 md:items-center md:gap-[clamp(2rem,6vw,6rem)]">
+          <div className="relative z-20 mx-auto grid max-w-[1200px] grid-cols-1 items-start md:h-full gap-[clamp(1.5rem,4vw,4rem)] px-[clamp(1.25rem,4vw,4rem)] py-[clamp(2rem,3vw,3rem)] md:grid-cols-2 md:items-center md:gap-[clamp(2rem,6vw,6rem)]">
             <div
               className="hidden items-center justify-center md:flex"
               // The same drift as before, expressed against `--progress` so the
@@ -184,9 +204,8 @@ export default function Timeline({ entries, displayDate }) {
                   again on every frame of the scroll that drives it.
                 */}
                 <div
-                  className="absolute left-0 top-0 h-full w-px origin-top"
+                  className="programme-line absolute left-0 top-0 h-full w-px origin-top"
                   style={{
-                    transform: "scaleY(min(1, calc(var(--progress, 0) * 2.8)))",
                     background:
                       "linear-gradient(to bottom, transparent, #A77B83 15%, #A77B83 85%, transparent)",
                     transition: "transform 0.1s linear",
@@ -200,10 +219,12 @@ export default function Timeline({ entries, displayDate }) {
                   return (
                     <div
                       key={`${entry.title}-${index}`}
-                      className={index < entries.length - 1 ? "relative pb-5 md:pb-7" : "relative"}
+                      className={`programme-entry relative ${
+                        index < entries.length - 1 ? "pb-5 md:pb-7" : ""
+                      }`}
                       style={{
-                        opacity: visible ? 1 : 0.2,
-                        transform: `translateY(${visible ? 0 : 12}px)`,
+                        "--entry-opacity": visible ? 1 : 0.2,
+                        "--entry-shift": visible ? "0px" : "12px",
                         transition: "opacity 0.6s ease, transform 0.6s ease",
                       }}
                     >
