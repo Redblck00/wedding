@@ -6,7 +6,6 @@ import Image from "next/image";
 import { naturalRatio } from "@/lib/images";
 import IntroductionDecorations from "./introduction-decorations";
 import Reveal from "./reveal";
-import { useScrollProgress } from "./use-scroll-progress";
 
 const CAPTIONS = [
   "THE LITTLE THINGS",
@@ -239,38 +238,49 @@ const DEPTH = { blur: 3.2, shrink: 0.07, fade: 0.55, drift: 0, zoom: 1 };
 const DEPTH_OFF = { blur: 0, shrink: 0, fade: 0, drift: 0, zoom: 1 };
 
 /**
- * Figma-style horizontal gallery: vertical scroll drives a sticky track sideways.
+ * Figma-style horizontal gallery: a strip of photographs the guest scrolls
+ * sideways themselves.
  *
- * Section height grows with photo count so each extra shot still has room to
- * travel across the viewport.
+ * It used to be scroll-driven — a 340vh section holding a sticky panel, where
+ * going *down* the page dragged the track *sideways*. That is a fine effect on
+ * a notebook with a wheel, and it was the wrong one on the phone every guest
+ * actually opens this on: the finger asked for one thing and the screen
+ * answered with another, the panel held the viewport for three screens of
+ * scrolling before the page would move on, and the invitation carried two
+ * thousand pixels of height that showed nothing.
+ *
+ * Now the strip is what it looks like: an `overflow-x: auto` scroller. A finger
+ * swiped sideways moves the photographs, a finger swiped up or down scrolls the
+ * page, and nothing here touches a touch event to arrange that. Momentum,
+ * rubber-banding and snapping are the browser's own, which is both better than
+ * anything reimplemented here and free — on a phone this gallery now costs no
+ * JavaScript per frame at all.
+ *
+ * `overscroll-x-contain` matters more than it looks. Without it a swipe that
+ * runs off the end of the strip is a back-gesture in Chrome and in Safari, and
+ * the guest leaves the invitation by reaching the last photograph.
+ *
+ * The mouse is the one pointer that still needs code, because a mouse has no
+ * sideways gesture: the handlers below turn click-and-drag into `scrollLeft`,
+ * and refuse every pointer that is not one.
  */
 function HorizontalGallery({ photos }) {
-  const sectionRef = useRef(null);
-  const trackRef = useRef(null);
-
-  // Geometry, not just the travel distance: the depth effects need to know where
-  // each card sits along the track, and measuring one card per frame in render
-  // would force a layout on every scroll tick.
-  const [track, setTrack] = useState({ maxX: 0, viewport: 0, cards: [] });
-  const [screen, setScreen] = useState({ compact: false, reduced: false });
-
-  // How far through the section the page has scrolled. Only read by the depth
-  // effects, so only maintained when they are running — see the callback below.
-  const [progress, setProgress] = useState(0);
+  const scrollerRef = useRef(null);
 
   /*
-   * Three refs for three things the scroll callback needs and React state
-   * cannot give it: that callback runs between renders, so it can only see what
-   * has been written somewhere it can reach.
-   *
-   * `geometry` mirrors the `track` state. `travelled` is the last progress
-   * reported, kept so a resize can re-apply the transform at the new width
-   * without waiting for the guest to scroll again. `depthOn` is whether
-   * anything in the render still depends on the scroll — when it does not, the
-   * callback writes its one transform and returns without touching React.
+   * Where each card sits along the strip and how wide the window onto it is.
+   * The depth effects need both, and measuring a card inside the render would
+   * force a layout on every scroll tick.
    */
-  const geometry = useRef({ maxX: 0, viewport: 0, cards: [] });
-  const travelled = useRef(0);
+  const [track, setTrack] = useState({ viewport: 0, cards: [] });
+  const [screen, setScreen] = useState({ compact: false, reduced: false });
+
+  // How far the strip has been scrolled, in pixels. Only maintained while the
+  // depth effects are running — see the scroll listener below.
+  const [scrolled, setScrolled] = useState(0);
+
+  // Whether anything in the render still depends on that number. Read by the
+  // listener, which runs between renders and so cannot see state.
   const depthOn = useRef(false);
 
   /*
@@ -293,43 +303,76 @@ function HorizontalGallery({ photos }) {
   // second path for phones.
   const [touched, setTouched] = useState(null);
 
+  /*
+   * Measure the strip, and re-measure whenever anything in it changes shape.
+   *
+   * The observer watches the cards, not only the scroller: the scroller is the
+   * width of the screen and stays that width, while the cards resize twice
+   * over — once when `measured` corrects a stored ratio, and again whenever
+   * `50vh` moves under a collapsing address bar. Watching only the scroller
+   * would leave the depth effects reading positions from before either.
+   */
   useEffect(() => {
-    const element = trackRef.current;
+    const element = scrollerRef.current;
     if (!element) return;
 
     const measure = () => {
-      const next = {
-        maxX: Math.max(0, element.scrollWidth - window.innerWidth),
-        viewport: window.innerWidth,
+      setTrack({
+        viewport: element.clientWidth,
         cards: Array.from(element.children, (card) => ({
-          // `offsetLeft` is measured from the track's own padding edge, which is
-          // the box the transform below moves — so subtracting the travel gives
-          // the card's position on screen directly.
+          // `offsetLeft` is measured from the scroller's own padding edge, and
+          // so is `scrollLeft` — so the two subtract cleanly in the render.
           centre: card.offsetLeft + card.offsetWidth / 2,
           width: card.offsetWidth,
         })),
-      };
-
-      geometry.current = next;
-      setTrack(next);
-
-      // A rotated phone has a new `maxX` and the old transform still on screen.
-      // Nothing corrects that until the guest scrolls, so it is re-applied here
-      // from the last progress reported.
-      element.style.transform = `translate3d(-${travelled.current * next.maxX}px, 0, 0)`;
+      });
     };
 
     measure();
-    window.addEventListener("resize", measure);
 
     const observer = new ResizeObserver(measure);
     observer.observe(element);
+    for (const child of element.children) observer.observe(child);
+
+    return () => observer.disconnect();
+  }, [photos]);
+
+  /*
+   * The scroll position, for the depth effects and for nothing else.
+   *
+   * Quantised to four pixels. The effects are a blur, a 7% scale and a fade,
+   * all read from a position measured against the full width of the window, so
+   * four pixels of travel is well under anything a guest could see — and it is
+   * the difference between a render on every frame of a scroll and a render on
+   * every fourth one.
+   */
+  useEffect(() => {
+    const element = scrollerRef.current;
+    if (!element) return;
+
+    let frame = 0;
+
+    const measure = () => {
+      frame = 0;
+      const stepped = Math.round(element.scrollLeft / 4) * 4;
+      setScrolled((current) => (current === stepped ? current : stepped));
+    };
+
+    const schedule = () => {
+      // On a phone the depth effects are off, so nothing in the render depends
+      // on the scroll position and React never needs to hear about it. A swipe
+      // there is the browser scrolling a box, and this listener returns.
+      if (!depthOn.current || frame) return;
+      frame = requestAnimationFrame(measure);
+    };
+
+    element.addEventListener("scroll", schedule, { passive: true });
 
     return () => {
-      window.removeEventListener("resize", measure);
-      observer.disconnect();
+      if (frame) cancelAnimationFrame(frame);
+      element.removeEventListener("scroll", schedule);
     };
-  }, [photos]);
+  }, []);
 
   /*
    * Both media queries in an effect, and neither read during render.
@@ -337,9 +380,9 @@ function HorizontalGallery({ photos }) {
    * `framer-motion`'s `useReducedMotion` would be the obvious way to get the
    * second one, but it reads `matchMedia` straight into `useState`'s initial
    * value — so for a guest who has reduced motion on, the server renders one
-   * zoom and the browser's first render another, and React tears the whole
-   * gallery down and rebuilds it over a hydration mismatch. Read after mount and
-   * the first paint always matches the HTML.
+   * gallery and the browser's first render another, and React tears the whole
+   * thing down over a hydration mismatch. Read after mount and the first paint
+   * always matches the HTML.
    *
    * `768px` is the same breakpoint Tailwind's `md:` uses. Watched rather than
    * sampled: a phone crosses it by being rotated.
@@ -349,7 +392,7 @@ function HorizontalGallery({ photos }) {
     const still = window.matchMedia("(prefers-reduced-motion: reduce)");
     const sync = () => {
       const next = { compact: narrow.matches, reduced: still.matches };
-      // Read by the scroll callback, which cannot wait for a commit.
+      // Read by the scroll listener, which cannot wait for a commit.
       depthOn.current = !next.compact && !next.reduced;
       setScreen(next);
     };
@@ -365,267 +408,293 @@ function HorizontalGallery({ photos }) {
   }, []);
 
   /*
-   * The one job that has to happen on every frame: slide the track.
+   * Click-and-drag, for a mouse and only for a mouse.
    *
-   * Written straight to the element rather than rendered, so a scroll costs one
-   * style write instead of a React render of the whole gallery. `transform` is
-   * deliberately absent from the JSX below — React only touches the style
-   * properties it is handed, so leaving it out is what stops a re-render from
-   * snapping the track back to wherever the last commit thought it was.
+   * `pointerType` is the whole guard. A touch already has a sideways gesture
+   * and the browser's is better than this could be — it has momentum, snapping
+   * and rubber-banding, none of which `scrollLeft` arithmetic reproduces. And
+   * claiming touch here would claim the *vertical* swipe with it, leaving a
+   * guest who wants to read on stuck on the photographs.
    */
-  useScrollProgress(sectionRef, (value) => {
-    travelled.current = value;
+  const drag = useRef(null);
 
-    const element = trackRef.current;
-    if (element) {
-      element.style.transform = `translate3d(-${value * geometry.current.maxX}px, 0, 0)`;
+  const startDrag = (event) => {
+    const element = scrollerRef.current;
+    if (!element || event.pointerType !== "mouse" || event.button !== 0) return;
+
+    drag.current = { from: event.clientX, left: element.scrollLeft };
+    element.setPointerCapture(event.pointerId);
+
+    // Mandatory snapping and a drag cannot both be in charge: every write to
+    // `scrollLeft` is a scroll operation of its own, and the browser answers
+    // each one by snapping back to the nearest card, so the strip fights the
+    // hand holding it. Off for the drag and handed back on release — which is
+    // also what makes it settle onto a photograph when the button comes up.
+    element.style.scrollSnapType = "none";
+
+    // Stops the browser starting a text selection or dragging the photograph
+    // out as an image, either of which ends a drag-scroll a few pixels in.
+    event.preventDefault();
+  };
+
+  const moveDrag = (event) => {
+    const element = scrollerRef.current;
+    if (!element || !drag.current) return;
+
+    element.scrollLeft = drag.current.left - (event.clientX - drag.current.from);
+  };
+
+  const endDrag = (event) => {
+    const element = scrollerRef.current;
+    if (!element || !drag.current) return;
+
+    drag.current = null;
+    element.style.scrollSnapType = "";
+    if (element.hasPointerCapture(event.pointerId)) {
+      element.releasePointerCapture(event.pointerId);
     }
-
-    if (!depthOn.current) return;
-
-    /*
-     * Quantised to four hundred steps, and only on the screens that use it.
-     *
-     * The depth effects are a blur, a 7% scale and a fade, and a four-hundredth
-     * of the track's length is well under the point where any of the three
-     * changes by something a guest could see. A long gallery is several
-     * thousand frames, so this is four hundred renders against all of them.
-     * `setState` with an unchanged value is free — React bails out before
-     * re-rendering — which is what makes the comparison worth making here.
-     */
-    const stepped = Math.round(value * 400) / 400;
-    setProgress((current) => (current === stepped ? current : stepped));
-  });
+  };
 
   const depth = screen.reduced || screen.compact ? DEPTH_OFF : DEPTH;
 
   /*
    * Whether there is a blur for a pointer to clear — and so whether the pointer
-   * handlers below are worth having at all.
+   * handlers on each card are worth having at all.
    *
-   * They are not free on a phone. A finger dragging the page sideways crosses
+   * They are not free on a phone. A finger dragging across the strip crosses
    * card after card, and every crossing fired `pointerenter`, which set state,
    * which re-rendered the gallery in the middle of the gesture it was reacting
    * to. With no blur to clear, all of that bought a `blur(0px)` replacing
    * nothing.
    */
   const clearable = depth.blur > 0;
-  const scrolled = progress * track.maxX;
-
-  // Enough travel that the last card can reach the centre; floor keeps short
-  // galleries from feeling over in one flick.
-  const sectionHeight = `${Math.max(220, 100 + photos.length * 40)}vh`;
 
   return (
-    <section ref={sectionRef} className="relative" style={{ height: sectionHeight }}>
-      <div className="sticky top-0 h-screen-safe overflow-hidden bg-[#FFF0F5]">
-        {/*
-          `GalleryDecorations` only — this panel already carries doves, petals
-          and flowers of its own, placed around a track of photographs rather
-          than around a block of text. A second set on top of them would be
-          twice the ornament in the one section that is meant to be looked
-          through, not at.
-        */}
-        <GalleryDecorations />
+    <section className="relative overflow-hidden bg-[#FFF0F5] pb-16 pt-14 md:pb-24 md:pt-20">
+      {/*
+        `GalleryDecorations` only — this panel already carries doves, petals
+        and flowers of its own, placed around a strip of photographs rather
+        than around a block of text. A second set on top of them would be
+        twice the ornament in the one section that is meant to be looked
+        through, not at.
+      */}
+      <GalleryDecorations />
 
-        <div className="absolute left-6 top-8 z-20 md:left-12 md:top-10">
-          <p className="font-invite-serif text-xs tracking-[0.45em] text-[#A77B83]">Gallery</p>
-          <p className="mt-1 font-invite-display italic text-[1.35rem] text-[#694951] md:text-[1.5rem]">
-            Хуримын зураг
-          </p>
-        </div>
-
-        <div
-          ref={trackRef}
-          className="absolute top-0 left-0 z-10 flex h-full items-center gap-[clamp(1.25rem,3vw,2.5rem)] will-change-transform"
-          // No `transform` here on purpose — it is written to this element by
-          // the scroll callback above, and listing it would hand React a value
-          // to reset it to on the next render.
-          style={{
-            paddingLeft: "clamp(1.5rem, 10vw, 10rem)",
-            paddingRight: "clamp(1.5rem, 6vw, 6rem)",
-          }}
-        >
-          {photos.map((photo, index) => {
-            const key = photo.id ?? index;
-            const ratio = measured[key] ?? naturalRatio(photo);
-            const label = String(index + 1).padStart(2, "0");
-            const caption = CAPTIONS[index % CAPTIONS.length];
-
-            const card = track.cards[index];
-            // Where this card sits relative to the middle of the screen, as a
-            // share of the screen's width: 0 dead centre, ±0.5 at either edge.
-            // Zero until the measurement lands, which is also what the server
-            // renders — so the first paint carries no effects and hydration has
-            // nothing to disagree about.
-            const offset =
-              card && track.viewport
-                ? (card.centre - scrolled - track.viewport / 2) / track.viewport
-                : 0;
-
-            // Saturates at ±0.45 of the screen, so a card is fully "away" by the
-            // time it reaches the edge rather than only once it has left.
-            const away = Math.min(1, Math.abs(offset) / 0.45);
-
-            // Pointing at a photograph is asking to see it, and answering that
-            // with a blurred one is the wrong answer. The depth effect exists to
-            // push the edges of the track back; it has no business standing
-            // between a guest and the picture they just reached for.
-            //
-            // Only the blur clears. `shrink` and `fade` still track the card's
-            // position, so the row keeps its depth and the hovered card does not
-            // jump out of the arrangement.
-            const focused = touched === index;
-            const blur = focused ? 0 : away * depth.blur;
-
-            return (
-              <div key={key} className="flex shrink-0 flex-col gap-3">
-                <div
-                  className="group relative overflow-hidden bg-[#F2DDE3]"
-                  onPointerEnter={clearable ? () => setTouched(index) : undefined}
-                  // Guarded rather than a bare `setTouched(null)`: moving from
-                  // one card to the next fires enter and leave in an order the
-                  // spec does not fix, and an unguarded leave would wipe the
-                  // entry the new card had just made.
-                  onPointerLeave={
-                    clearable
-                      ? () => setTouched((current) => (current === index ? null : current))
-                      : undefined
-                  }
-                  // A touch that turns into a scroll is cancelled, not left —
-                  // without this the card a guest brushed on the way past would
-                  // stay clear for the rest of the session.
-                  onPointerCancel={
-                    clearable
-                      ? () => setTouched((current) => (current === index ? null : current))
-                      : undefined
-                  }
-                  style={{
-                    // Height is the driven axis and width comes from the ratio,
-                    // so the picture is never cropped whatever shape it is —
-                    // `aspect-ratio` sizes the axis that is left `auto`.
-                    //
-                    // The `min()` is the phone case: a 3:2 photograph at this
-                    // height came out 519px wide on a 390px screen, so it could
-                    // never be seen whole at any scroll position. Capping the
-                    // *height* keeps the ratio honest — capping the width with
-                    // `max-width` would leave the height behind and crop it.
-                    //
-                    // The ratio in both halves is the photograph's own, taken
-                    // from the file once it has loaded. Nothing rounds it into
-                    // a bucket and nothing clamps it, so a card is the shape of
-                    // the picture in it — a tall one stands tall, a wide one
-                    // lies wide, and a panorama is simply a long thin card.
-                    //
-                    // 94vw, not a safer 80: the cap only ever binds on a wide
-                    // photo, and every percent taken off the width comes off the
-                    // height twice as fast. At 86vw a landscape card stood 224px
-                    // tall next to a 432px portrait, which is not rhythm, it is
-                    // one of them looking like a mistake. At 94vw a wide photo
-                    // takes the screen almost edge to edge — one picture at a
-                    // time, which is the right unit on a phone anyway.
-                    height: `min(calc(clamp(240px, 50vh, 460px) * ${cardHeightScale(ratio, index)}), calc(94vw / ${ratio}))`,
-                    aspectRatio: ratio,
-                    transform: `scale(${1 - away * depth.shrink})`,
-                    transition: "transform 0.25s ease-out",
-                  }}
-                >
-                  <div
-                    className="absolute inset-0"
-                    style={{
-                      // The photograph drifts against its own frame, which is
-                      // what reads as depth. `zoom` is the headroom that makes
-                      // it possible: without it the drift would expose the edge
-                      // of the picture.
-                      transform: `translate3d(${
-                        Math.max(-1, Math.min(1, offset)) * (card?.width ?? 0) * depth.drift
-                      }px, 0, 0) scale(${depth.zoom})`,
-                      // Omitted entirely rather than set to `blur(0px)`: a
-                      // filter property promotes the element to its own
-                      // compositor layer even when it does nothing.
-                      //
-                      // The focused card is the one exception, and it has to be.
-                      // A transition cannot run to or from `none`, so dropping
-                      // the property is what makes the blur vanish in one frame
-                      // instead of easing away — the layer costs one card's
-                      // worth of compositing while a pointer is on it, which is
-                      // the cheaper half of that trade.
-                      filter:
-                        blur > 0.05
-                          ? `blur(${blur.toFixed(2)}px)`
-                          : focused
-                            ? "blur(0px)"
-                            : undefined,
-                      // Named, not `all`: the transform on this same element is
-                      // rewritten every scroll frame to drive the parallax, and
-                      // easing that would turn a live effect into a lagging one.
-                      transition: "filter 0.25s ease-out",
-                    }}
-                  >
-                    <Image
-                      src={photo.url}
-                      alt=""
-                      fill
-                      preload={index === 0}
-                      // What the file says it is, once there is a file to ask.
-                      // A frame built from a wrong stored width would otherwise
-                      // stay wrong for the whole visit.
-                      onLoad={(event) => {
-                        const { naturalWidth, naturalHeight } = event.currentTarget;
-                        if (!naturalWidth || !naturalHeight) return;
-
-                        const actual = naturalWidth / naturalHeight;
-                        setMeasured((current) =>
-                          // Guarded: `onLoad` fires again for every new source
-                          // Next serves as the screen resizes, and an unguarded
-                          // write would be a render on each of them.
-                          Math.abs((current[key] ?? 0) - actual) < 0.001
-                            ? current
-                            : { ...current, [key]: actual },
-                        );
-                      }}
-                      // `md:` on the hover zoom, not because a phone cannot
-                      // hover but because it never stops: a tap leaves `:hover`
-                      // set on the card until something else is tapped, so on a
-                      // phone this was a permanent 5% crop applied to whichever
-                      // photograph a guest had touched last.
-                      // `contain`, not `cover`. With the frame already the
-                      // shape of the photograph the two draw the same pixels —
-                      // but they fail differently, and that is the point: if a
-                      // ratio is ever wrong again, `cover` answers by cutting
-                      // the picture and `contain` answers by leaving a little
-                      // of the card's own pink showing. One of those is a
-                      // photograph with someone missing from it.
-                      className="object-contain transition-transform duration-700 ease-out md:group-hover:scale-105"
-                      // Cards run to 94vw on a phone and about 590px on a
-                      // desktop. The old `70vw` under-asked for every landscape
-                      // card, and Next served a file too small for the frame.
-                      sizes="(max-width: 768px) 95vw, 620px"
-                    />
-                  </div>
-                </div>
-
-                <div
-                  className="flex items-center gap-2.5"
-                  style={{ opacity: 1 - away * depth.fade, transition: "opacity 0.25s ease-out" }}
-                >
-                  <span className="font-invite-serif text-xs tracking-[0.3em] text-[#A77B83]">
-                    {label}
-                  </span>
-                  <div className="h-px w-5 bg-[#A77B83]/35" />
-                  <span className="font-invite-serif text-xs tracking-[0.2em] text-[#916C74]">
-                    {caption}
-                  </span>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-
-        <p className="absolute bottom-8 left-1/2 z-20 -translate-x-1/2 font-invite-serif text-[9px] uppercase tracking-[0.4em] text-[#B1848C] md:bottom-10">
-          Гүйлгэж үзнэ үү
+      <div className="relative z-20 px-6 md:px-12">
+        <p className="font-invite-serif text-xs tracking-[0.45em] text-[#A77B83]">Gallery</p>
+        <p className="mt-1 font-invite-display italic text-[1.35rem] text-[#694951] md:text-[1.5rem]">
+          Хуримын зураг
         </p>
       </div>
+
+      {/*
+        `tabIndex` and the label are not decoration: a scrollable region only a
+        gesture can reach is unreachable from a keyboard, and with them the
+        arrow keys move the strip like any other scroller.
+
+        No `will-change: transform` any more, and nothing writes a transform to
+        this element — the browser is scrolling a box now, which it already
+        knows how to do without help.
+      */}
+      <div
+        ref={scrollerRef}
+        data-gallery-scroller
+        role="region"
+        aria-label="Хуримын зургууд"
+        tabIndex={0}
+        onPointerDown={startDrag}
+        onPointerMove={moveDrag}
+        onPointerUp={endDrag}
+        onPointerCancel={endDrag}
+        className="scrollbar-hide relative z-10 mt-8 flex snap-x snap-mandatory items-center gap-[clamp(1.25rem,3vw,2.5rem)] overflow-x-auto overscroll-x-contain focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#CFAAB2] md:cursor-grab md:active:cursor-grabbing"
+        style={{
+          paddingLeft: "clamp(1.5rem, 10vw, 10rem)",
+          paddingRight: "clamp(1.5rem, 6vw, 6rem)",
+        }}
+      >
+        {photos.map((photo, index) => {
+          const key = photo.id ?? index;
+          const ratio = measured[key] ?? naturalRatio(photo);
+          const label = String(index + 1).padStart(2, "0");
+          const caption = CAPTIONS[index % CAPTIONS.length];
+
+          const card = track.cards[index];
+          // Where this card sits relative to the middle of the screen, as a
+          // share of the screen's width: 0 dead centre, ±0.5 at either edge.
+          // Zero until the measurement lands, which is also what the server
+          // renders — so the first paint carries no effects and hydration has
+          // nothing to disagree about.
+          const offset =
+            card && track.viewport
+              ? (card.centre - scrolled - track.viewport / 2) / track.viewport
+              : 0;
+
+          // Saturates at ±0.45 of the screen, so a card is fully "away" by the
+          // time it reaches the edge rather than only once it has left.
+          const away = Math.min(1, Math.abs(offset) / 0.45);
+
+          // Pointing at a photograph is asking to see it, and answering that
+          // with a blurred one is the wrong answer. The depth effect exists to
+          // push the edges of the track back; it has no business standing
+          // between a guest and the picture they just reached for.
+          //
+          // Only the blur clears. `shrink` and `fade` still track the card's
+          // position, so the row keeps its depth and the hovered card does not
+          // jump out of the arrangement.
+          const focused = touched === index;
+          const blur = focused ? 0 : away * depth.blur;
+
+          return (
+            <div key={key} className="flex shrink-0 snap-center flex-col gap-3">
+              <div
+                className="group relative overflow-hidden bg-[#F2DDE3]"
+                onPointerEnter={clearable ? () => setTouched(index) : undefined}
+                // Guarded rather than a bare `setTouched(null)`: moving from
+                // one card to the next fires enter and leave in an order the
+                // spec does not fix, and an unguarded leave would wipe the
+                // entry the new card had just made.
+                onPointerLeave={
+                  clearable
+                    ? () => setTouched((current) => (current === index ? null : current))
+                    : undefined
+                }
+                // A touch that turns into a scroll is cancelled, not left —
+                // without this the card a guest brushed on the way past would
+                // stay clear for the rest of the session.
+                onPointerCancel={
+                  clearable
+                    ? () => setTouched((current) => (current === index ? null : current))
+                    : undefined
+                }
+                style={{
+                  // Height is the driven axis and width comes from the ratio,
+                  // so the picture is never cropped whatever shape it is —
+                  // `aspect-ratio` sizes the axis that is left `auto`.
+                  //
+                  // The `min()` is the phone case: a 3:2 photograph at this
+                  // height came out 519px wide on a 390px screen, so it could
+                  // never be seen whole at any scroll position. Capping the
+                  // *height* keeps the ratio honest — capping the width with
+                  // `max-width` would leave the height behind and crop it.
+                  //
+                  // The ratio in both halves is the photograph's own, taken
+                  // from the file once it has loaded. Nothing rounds it into
+                  // a bucket and nothing clamps it, so a card is the shape of
+                  // the picture in it — a tall one stands tall, a wide one
+                  // lies wide, and a panorama is simply a long thin card.
+                  //
+                  // 94vw, not a safer 80: the cap only ever binds on a wide
+                  // photo, and every percent taken off the width comes off the
+                  // height twice as fast. At 86vw a landscape card stood 224px
+                  // tall next to a 432px portrait, which is not rhythm, it is
+                  // one of them looking like a mistake. At 94vw a wide photo
+                  // takes the screen almost edge to edge — one picture at a
+                  // time, which is the right unit on a phone anyway.
+                  height: `min(calc(clamp(240px, 50vh, 460px) * ${cardHeightScale(ratio, index)}), calc(94vw / ${ratio}))`,
+                  aspectRatio: ratio,
+                  transform: `scale(${1 - away * depth.shrink})`,
+                  transition: "transform 0.25s ease-out",
+                }}
+              >
+                <div
+                  className="absolute inset-0"
+                  style={{
+                    // The photograph drifts against its own frame, which is
+                    // what reads as depth. `zoom` is the headroom that makes
+                    // it possible: without it the drift would expose the edge
+                    // of the picture.
+                    transform: `translate3d(${
+                      Math.max(-1, Math.min(1, offset)) * (card?.width ?? 0) * depth.drift
+                    }px, 0, 0) scale(${depth.zoom})`,
+                    // Omitted entirely rather than set to `blur(0px)`: a
+                    // filter property promotes the element to its own
+                    // compositor layer even when it does nothing.
+                    //
+                    // The focused card is the one exception, and it has to be.
+                    // A transition cannot run to or from `none`, so dropping
+                    // the property is what makes the blur vanish in one frame
+                    // instead of easing away — the layer costs one card's
+                    // worth of compositing while a pointer is on it, which is
+                    // the cheaper half of that trade.
+                    filter:
+                      blur > 0.05
+                        ? `blur(${blur.toFixed(2)}px)`
+                        : focused
+                          ? "blur(0px)"
+                          : undefined,
+                    // Named, not `all`: the transform on this same element is
+                    // rewritten every scroll frame to drive the parallax, and
+                    // easing that would turn a live effect into a lagging one.
+                    transition: "filter 0.25s ease-out",
+                  }}
+                >
+                  <Image
+                    src={photo.url}
+                    alt=""
+                    fill
+                    preload={index === 0}
+                    // A mouse drag across the strip would otherwise pick a
+                    // photograph up and carry it, which ends the drag and
+                    // leaves a ghost image trailing the cursor.
+                    draggable={false}
+                    // What the file says it is, once there is a file to ask.
+                    // A frame built from a wrong stored width would otherwise
+                    // stay wrong for the whole visit.
+                    onLoad={(event) => {
+                      const { naturalWidth, naturalHeight } = event.currentTarget;
+                      if (!naturalWidth || !naturalHeight) return;
+
+                      const actual = naturalWidth / naturalHeight;
+                      setMeasured((current) =>
+                        // Guarded: `onLoad` fires again for every new source
+                        // Next serves as the screen resizes, and an unguarded
+                        // write would be a render on each of them.
+                        Math.abs((current[key] ?? 0) - actual) < 0.001
+                          ? current
+                          : { ...current, [key]: actual },
+                      );
+                    }}
+                    // `md:` on the hover zoom, not because a phone cannot
+                    // hover but because it never stops: a tap leaves `:hover`
+                    // set on the card until something else is tapped, so on a
+                    // phone this was a permanent 5% crop applied to whichever
+                    // photograph a guest had touched last.
+                    // `contain`, not `cover`. With the frame already the
+                    // shape of the photograph the two draw the same pixels —
+                    // but they fail differently, and that is the point: if a
+                    // ratio is ever wrong again, `cover` answers by cutting
+                    // the picture and `contain` answers by leaving a little
+                    // of the card's own pink showing. One of those is a
+                    // photograph with someone missing from it.
+                    className="object-contain transition-transform duration-700 ease-out md:group-hover:scale-105"
+                    // Cards run to 94vw on a phone and about 590px on a
+                    // desktop. The old `70vw` under-asked for every landscape
+                    // card, and Next served a file too small for the frame.
+                    sizes="(max-width: 768px) 95vw, 620px"
+                  />
+                </div>
+              </div>
+
+              <div
+                className="flex items-center gap-2.5"
+                style={{ opacity: 1 - away * depth.fade, transition: "opacity 0.25s ease-out" }}
+              >
+                <span className="font-invite-serif text-xs tracking-[0.3em] text-[#A77B83]">
+                  {label}
+                </span>
+                <div className="h-px w-5 bg-[#A77B83]/35" />
+                <span className="font-invite-serif text-xs tracking-[0.2em] text-[#916C74]">
+                  {caption}
+                </span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      <p className="relative z-20 mt-9 text-center font-invite-serif text-[9px] uppercase tracking-[0.4em] text-[#B1848C]">
+        Хажуу тийш гүйлгэнэ үү
+      </p>
     </section>
   );
 }
